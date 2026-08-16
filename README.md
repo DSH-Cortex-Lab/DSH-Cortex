@@ -3,6 +3,9 @@
 > DeepSeek Harness（`dsh`）的「长期记忆 + 自动技能化 + 管理面板」插件集。
 > 纯 Cordis 插件叠加、通过 profile 装配，**不修改 dsh 核心**。
 
+[![GitHub stars](https://img.shields.io/github/stars/DSH-Cortex-Lab/DSH-Cortex)](https://github.com/DSH-Cortex-Lab/DSH-Cortex)
+[![license](https://img.shields.io/github/license/DSH-Cortex-Lab/DSH-Cortex)](LICENSE)
+
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 是 DeepSeek AI 开源的 agent harness（Cordis 插件框架，"everything is a plugin"）。DSH-Cortex 补齐 dsh 缺失的两个能力——跨会话长期记忆与经验自动沉淀，并提供统一的管理面板。
 
 ## 特性
@@ -25,6 +28,16 @@
 依赖方向：`skill-forge → review-core`、`memory → review-core`、`cortex-ui → memory`（读取 core:personality 文本）。
 
 ## 快速开始
+
+### 快速安装（源码）
+
+当前版本从源码装配（npm 发布后提供 `dsh plugin --profile web add dsh-cortex` 一键安装）：
+
+```sh
+git clone https://github.com/DSH-Cortex-Lab/DSH-Cortex.git
+# 按下方「装配」两节，把四个包 link 进 profile 并写入 cordis.patch.yml
+# 重启 dsh web 生效
+```
 
 ### 环境要求
 
@@ -130,6 +143,31 @@ node dsh-skill-forge/tests/forge.runtime.mjs
 ## 开发准则
 
 见 [docs/开发准则.md](docs/开发准则.md)。当前准则：严禁使用 emoji。
+
+## 反馈
+
+问题、需求、设计讨论：提交到 [GitHub Issues](https://github.com/DSH-Cortex-Lab/DSH-Cortex/issues)。
+
+## 贡献者
+
+| 贡献者 | 贡献 |
+|---|---|
+| [QinYun165](https://github.com/QinYun165) | 插件实现（memory-harness / skill-forge / review-core） |
+
+## 开发者文档
+
+| 文档 | 内容 |
+|---|---|
+| [docs/架构说明.md](docs/架构说明.md) | 架构设计与关键机制 |
+| [docs/验收报告.md](docs/验收报告.md) | 四层验收记录 |
+| [docs/交付与交接.md](docs/交付与交接.md) | 交付物与交接说明 |
+| [docs/开发准则.md](docs/开发准则.md) | 开发准则（严禁 emoji） |
+| [dsh-memory-harness/README.md](dsh-memory-harness/README.md) | 记忆插件包档案 |
+| [dsh-skill-forge/README.md](dsh-skill-forge/README.md) | 技能插件包档案 |
+| [dsh-review-core/README.md](dsh-review-core/README.md) | 共享基建包档案 |
+| [dsh-cortex-ui/README.md](dsh-cortex-ui/README.md) | 管理面板包档案 |
+
+仓库结构：`dsh-memory-harness/`、`dsh-skill-forge/`、`dsh-review-core/`、`dsh-cortex-ui/`（四个包）、`M0/`（环境验证示例）、`docs/`（文档）。
 
 ## 许可
 
