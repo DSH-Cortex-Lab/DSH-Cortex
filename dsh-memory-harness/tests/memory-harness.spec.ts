@@ -32,7 +32,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import * as MemoryHarness from '@dsh-cortex/dsh-memory-harness'
-import { SoulProvider } from '@dsh-cortex/dsh-memory-harness'
+import { SoulProvider, CoreProvider, CORE_PERSONALITY_TEXT } from '@dsh-cortex/dsh-memory-harness'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 let seq = 0
@@ -128,6 +128,45 @@ describe('MemoryHarness ① 层验收', () => {
     it('文件缺失 → 空人格，不抛异常', () => {
       const soul = new SoulProvider(join(tmpHome(), 'SOUL.md'))
       expect(soul.frozenFor()).toBe('')
+    })
+  })
+
+  describe('core:personality 可编辑（懒重载 + 默认模板初始化）', () => {
+    it('首次启动无 core-personality.md → init 自动写默认模板', () => {
+      const home = tmpHome()
+      const coreFile = join(home, 'core-personality.md')
+      const core = new CoreProvider(coreFile)
+      core.init()
+      expect(readFileSync(coreFile, 'utf8')).toBe(CORE_PERSONALITY_TEXT)
+    })
+
+    it('懒重载：改文件 → 新内容；未改字节稳定', async () => {
+      const home = tmpHome()
+      const coreFile = join(home, 'core-personality.md')
+      const core = new CoreProvider(coreFile)
+      core.init()
+      expect(core.frozenFor()).toBe(CORE_PERSONALITY_TEXT)
+      expect(core.frozenFor()).toBe(CORE_PERSONALITY_TEXT) // 缓存命中
+      await new Promise(r => setTimeout(r, 25))
+      writeFileSync(coreFile, 'custom baseline')
+      expect(core.frozenFor()).toBe('custom baseline')
+    })
+
+    it('文件被删 → 降级返回默认文本', () => {
+      const home = tmpHome()
+      const coreFile = join(home, 'core-personality.md')
+      const core = new CoreProvider(coreFile)
+      core.init()
+      rmSync(coreFile, { force: true })
+      expect(core.frozenFor()).toBe(CORE_PERSONALITY_TEXT)
+    })
+  })
+
+  describe('core 接线（apply 注册 + 首次初始化）', () => {
+    it('harness 装配后自动生成 core-personality.md（默认模板）', async () => {
+      const home = tmpHome()
+      await harness(home, [textResponse('ack')])
+      expect(readFileSync(join(home, 'core-personality.md'), 'utf8')).toBe(CORE_PERSONALITY_TEXT)
     })
   })
 

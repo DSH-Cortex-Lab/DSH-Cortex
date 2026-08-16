@@ -1,0 +1,4 @@
+# dsh-memory-harness bundle patch: register the memory tools and snapshot service.
+- insert:
+    - id: memory-harness
+      name: '@dsh-cortex/dsh-memory-harness'

@@ -11,10 +11,11 @@ import z from '@deepseek-ai/schemastery'
 import { MemoryStore } from './store.ts'
 import { applySnapshot } from './snapshot.ts'
 import { registerMemoryTools } from './tools.ts'
-import { SoulProvider } from './soul.ts'
+import { SoulProvider, CoreProvider } from './soul.ts'
 import {
   DEFAULT_ARCHIVE,
   resolveArchiveId,
+  resolveCoreFile,
   resolveHomePath,
   resolveMemoryPaths,
   resolveProcessProfile,
@@ -24,13 +25,14 @@ export { MemoryStore, parseEntries, serializeEntries } from './store.ts'
 export type { MemorySnapshot, MemoryTarget, WriteResult, MemoryFs } from './store.ts'
 export { renderMemorySnapshot, applySnapshot } from './snapshot.ts'
 export type { MemorySnapshotSource } from './snapshot.ts'
-export { SoulProvider, CORE_PERSONALITY_TEXT } from './soul.ts'
+export { SoulProvider, CoreProvider, FilePersonalityProvider, CORE_PERSONALITY_TEXT } from './soul.ts'
 // 安全扫描来自共享基建 dsh-review-core（G4）
 export { scanSecrets, hasSecrets } from '@dsh-cortex/dsh-review-core'
 export type { SecretKind } from '@dsh-cortex/dsh-review-core'
 export {
   DEFAULT_ARCHIVE,
   resolveArchiveId,
+  resolveCoreFile,
   resolveHomePath,
   resolveMemoryPaths,
   resolveProcessProfile,
@@ -81,5 +83,9 @@ export function apply(ctx: Context, config: Config): void {
   )
   if (config.includeSnapshot) applySnapshot(ctx, store)
   registerMemoryTools(ctx, store)
-  if (config.includeSoul) new SoulProvider(paths.soulFile).register(ctx)
+  if (config.includeSoul) {
+    new SoulProvider(paths.soulFile).register(ctx)
+    // core-personality.md 固定在 $DSH_HOME 根（全局，不随 profile）；缺失时自动写默认模板
+    new CoreProvider(resolveCoreFile(homePath)).register(ctx)
+  }
 }
