@@ -3,7 +3,8 @@
  *
  * 五 tab：人格 / 记忆 / 用户画像 / 技能 / MCP。
  * 数据通道：GET /cortex/api/status + POST /cortex/api/soul +
- * POST /cortex/api/skill/locate（webServer 路由，preset 层实例注册）；轮询 5s 刷新。
+ * POST /cortex/api/user + POST /cortex/api/skill/locate
+ * （webServer 路由，preset 层实例注册）；轮询 5s 刷新。
  *
  * 入口：sidebar.footer.action（官方注释：Footer actions stack above Settings）
  * 样式对齐 ui-settings 的 trigger 行：14px、圆角 12、悬停
@@ -79,6 +80,8 @@ interface CortexStatus {
   ok: boolean
   soul: string
   soulPath: string
+  user: string
+  userPath: string
   core: string
   skills: SkillRow[]
   mcp: McpRow[]
@@ -371,6 +374,118 @@ function SkillLocate({ name }: { name: string }): React.ReactElement {
     }, t('skill.locateOpen')))
 }
 
+// ── 用户画像编辑器（USER.md；SOUL/core 编辑器后续复用同款）──
+const editorCard: React.CSSProperties = {
+  border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-3)', overflow: 'hidden',
+  display: 'flex', flexDirection: 'column', maxWidth: 720,
+}
+const editorArea: React.CSSProperties = {
+  width: '100%', minHeight: 340, padding: '12px 14px', boxSizing: 'border-box',
+  border: 'none', outline: 'none', resize: 'vertical', background: 'transparent',
+  color: 'var(--dsw-alias-label-primary)',
+  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
+  fontSize: 13, lineHeight: 1.6,
+}
+const editorFoot: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+  borderTop: '1px solid var(--dsw-alias-border-l2)',
+}
+const saveBtn: React.CSSProperties = {
+  flexShrink: 0, appearance: 'none', border: 'none', borderRadius: 8,
+  padding: '4px 14px', fontSize: 12, lineHeight: '18px', font: 'inherit',
+  cursor: 'pointer',
+  background: 'var(--dsw-alias-label-primary)', color: 'var(--dsw-alias-bg-layer-3)',
+}
+const saveNote: React.CSSProperties = { flexShrink: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' }
+
+interface FileEditorProps {
+  value: string
+  path: string
+  endpoint: string
+  field: string
+  placeholder: string
+}
+
+/** 通用文件编辑器：轮询到的外部值仅在未编辑（!dirty）时镜像；保存走 POST endpoint。 */
+function FileEditor({ value, path, endpoint, field, placeholder }: FileEditorProps): React.ReactElement {
+  const [draft, setDraft] = useState(value)
+  const [dirty, setDirty] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [errMsg, setErrMsg] = useState('')
+
+  // status 轮询刷新：未编辑状态下跟随外部值；编辑中（dirty）不被覆盖
+  useEffect(() => {
+    if (!dirty) setDraft(value)
+  }, [value, dirty])
+
+  // 「已保存」提示 2s 后回落
+  useEffect(() => {
+    if (phase !== 'saved') return
+    const timer = setTimeout(() => setPhase('idle'), 2000)
+    return () => clearTimeout(timer)
+  }, [phase])
+
+  const save = (): void => {
+    setPhase('saving')
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ [field]: draft }),
+    }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) {
+          const data = d as { error?: string }
+          setPhase('error')
+          setErrMsg(data.error ?? String(d))
+          return
+        }
+        setDirty(false)
+        setPhase('saved')
+      })
+      .catch((e) => { setPhase('error'); setErrMsg(String(e)) })
+  }
+
+  return createElement('div', { style: editorCard },
+    createElement('textarea', {
+      style: editorArea,
+      value: draft,
+      placeholder,
+      'aria-label': placeholder,
+      spellCheck: false,
+      onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setDraft(e.target.value)
+        setDirty(true)
+        if (phase === 'error' || phase === 'saved') setPhase('idle')
+      },
+    }),
+    createElement('div', { style: editorFoot },
+      createElement('code', { style: { ...rowDetailCode, flex: 1 } }, path || t('persona.noBridge')),
+      phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, t('user.saveFailed') + errMsg) : null,
+      phase === 'saved' ? createElement('span', { style: saveNote }, t('user.saved')) : null,
+      createElement('span', { style: saveNote }, draft.length + ' ' + t('persona.chars')),
+      createElement('button', {
+        type: 'button',
+        style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
+        disabled: phase === 'saving',
+        onClick: save,
+      }, phase === 'saving' ? t('user.saving') : t('user.save'))),
+  )
+}
+
+/** 用户画像 tab：USER.md 编辑器 */
+function UserTab({ status }: { status: CortexStatus | null }): React.ReactElement {
+  return createElement('div', null,
+    createElement('p', { style: statusText }, t('user.intro')),
+    createElement(FileEditor, {
+      value: status?.user ?? '',
+      path: status?.userPath ?? '',
+      endpoint: '/cortex/api/user',
+      field: 'user',
+      placeholder: t('user.placeholder'),
+    }))
+}
+
 /** 通用可搜索清单（复刻插件清单页） */
 function SearchableList({ heading, rows, matches, renderTitle, renderTags, renderDetails }: {
   heading: string
@@ -520,11 +635,13 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
             ? createElement('p', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 13 } }, t('channelError') + error)
             : tab === 'persona'
               ? createElement(PersonaTab, { status })
-              : tab === 'skill'
-                ? createElement(SkillTab, { status })
-                : tab === 'mcp'
-                  ? createElement(McpTab, { status })
-                  : createElement(TabPlaceholder, { tab }),
+              : tab === 'user'
+                ? createElement(UserTab, { status })
+                : tab === 'skill'
+                  ? createElement(SkillTab, { status })
+                  : tab === 'mcp'
+                    ? createElement(McpTab, { status })
+                    : createElement(TabPlaceholder, { tab }),
         ),
       ),
     ),
