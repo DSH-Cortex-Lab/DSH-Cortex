@@ -504,7 +504,13 @@ function CortexEntry({ wide }: { wide: boolean }): React.ReactElement {
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register('cortex-ui', { zh, en }), 'dsh-cortex-ui: dictionaries')
   currentT = ctx.locale.bind('cortex-ui') as TFunc
-  localeFace = ctx.locale as unknown as LocaleFace
+  // locale 是 class 实例：直接传 ctx.locale.getSnapshot 会丢失 this
+  // （"Cannot read properties of undefined (reading 'snapshot')"）。
+  // 用箭头包装，保持 this 指向 locale 服务实例。
+  localeFace = {
+    subscribe: (fn: () => void) => ctx.locale.subscribe(fn),
+    getSnapshot: () => ctx.locale.getSnapshot(),
+  }
   ctx.effect(() => ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register({
       name: 'sidebar.footer.action',
