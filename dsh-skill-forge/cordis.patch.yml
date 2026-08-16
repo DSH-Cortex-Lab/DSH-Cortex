@@ -1,0 +1,4 @@
+# dsh-skill-forge bundle patch: register the skill write tools and background review.
+- insert:
+    - id: dsh-skill-forge
+      name: '@dsh-cortex/dsh-skill-forge'

@@ -81,6 +81,8 @@ export function apply(ctx: Context, config: Config): void {
     undefined,
     archiveId,
   )
+  // 组合层服务：供 dsh-skill-forge 的 review 三路输出（MEMORY/USER 增改删）复用本 store
+  ctx.provide('memoryStore', store)
   if (config.includeSnapshot) applySnapshot(ctx, store)
   registerMemoryTools(ctx, store)
   if (config.includeSoul) {
