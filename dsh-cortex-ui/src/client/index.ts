@@ -76,6 +76,11 @@ interface McpRow {
   endpoint: string
   enabled: boolean
 }
+interface StagedSkillRow {
+  name: string
+  description: string
+  createdAt: number
+}
 interface CortexStatus {
   ok: boolean
   soul: string
@@ -88,6 +93,7 @@ interface CortexStatus {
   userLimit: number
   core: string
   corePath: string
+  staged: StagedSkillRow[]
   skills: SkillRow[]
   mcp: McpRow[]
   updatedAt: number
@@ -589,12 +595,81 @@ function SearchableList({ heading, rows, matches, renderTitle, renderTags, rende
   )
 }
 
-/** 技能 tab：ctx.skills 快照清单 */
-function SkillTab({ status }: { status: CortexStatus | null }): React.ReactElement {
+// ── 待入库（staged）分区：逐项 入库 / 丢弃（v2 人控入库）──
+const stagedCard: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+  border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 10,
+  background: 'var(--dsw-alias-bg-layer-3)', marginBottom: 8,
+}
+const stagedName: React.CSSProperties = {
+  flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)',
+}
+const stagedDesc: React.CSSProperties = {
+  flex: 1, minWidth: 0, fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
+  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+}
+const stagedBtn: React.CSSProperties = {
+  flexShrink: 0, appearance: 'none', border: '1px solid var(--dsw-alias-border-l2)',
+  borderRadius: 8, padding: '3px 10px', fontSize: 12, lineHeight: '18px', font: 'inherit',
+  cursor: 'pointer', background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-primary)',
+}
+
+function StagedSection({ rows, refresh }: { rows: StagedSkillRow[]; refresh: () => void }): React.ReactElement {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [errMsg, setErrMsg] = useState('')
+  const act = (name: string, action: 'promote' | 'discard'): void => {
+    if (action === 'discard' && !window.confirm(t('staged.discardConfirm') + name)) return
+    setBusy(name + action)
+    setErrMsg('')
+    fetch('/cortex/api/staged/' + action, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) {
+          const data = d as { error?: string }
+          setErrMsg(data.error ?? String(d))
+          return
+        }
+        refresh()
+      })
+      .catch((e) => setErrMsg(String(e)))
+      .finally(() => setBusy(null))
+  }
+  return createElement('div', null,
+    createElement('div', { style: catalogHeading },
+      createElement('h3', { style: catalogTitle }, t('staged.heading')),
+      createElement('span', { style: catalogCount }, String(rows.length))),
+    rows.length === 0
+      ? createElement('p', { style: statusText }, t('staged.empty'))
+      : rows.map((row) => createElement('div', { style: stagedCard, key: row.name },
+        createElement('span', { style: stagedName }, row.name),
+        createElement('span', { style: stagedDesc }, row.description || t('list.noDescription')),
+        createElement('button', {
+          type: 'button',
+          style: stagedBtn,
+          disabled: busy !== null,
+          onClick: () => act(row.name, 'promote'),
+        }, t('staged.promote')),
+        createElement('button', {
+          type: 'button',
+          style: stagedBtn,
+          disabled: busy !== null,
+          onClick: () => act(row.name, 'discard'),
+        }, t('staged.discard')))),
+    errMsg !== '' ? createElement('p', { style: { ...statusText, color: 'var(--dsw-alias-state-error-primary)' } }, errMsg) : null,
+  )
+}
+
+/** 技能 tab：待入库分区 + ctx.skills 快照清单 */
+function SkillTab({ status, refresh }: { status: CortexStatus | null; refresh: () => void }): React.ReactElement {
   const rows = (status?.skills ?? []).map((s) => ({ key: s.name, ...s }))
   return createElement('div', null,
     createElement('p', { style: statusText },
       t('skill.intro')),
+    createElement(StagedSection, { rows: status?.staged ?? [], refresh }),
     createElement(SearchableList, {
       heading: t('skill.heading'),
       rows,
@@ -650,7 +725,7 @@ function TabPlaceholder({ tab }: { tab: TabId }): React.ReactElement {
 function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
   const [tab, setTab] = useState<TabId>('persona')
   const [closeHover, setCloseHover] = useState(false)
-  const { status, error } = useCortexStatus()
+  const { status, error, refresh } = useCortexStatus()
   useLocaleRevision() // locale 切换 → 重渲染 → t() 取新文案
 
   useEffect(() => {
@@ -693,7 +768,7 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
                 : tab === 'user'
                   ? createElement(UserTab, { status })
                   : tab === 'skill'
-                    ? createElement(SkillTab, { status })
+                    ? createElement(SkillTab, { status, refresh })
                     : tab === 'mcp'
                       ? createElement(McpTab, { status })
                       : createElement(TabPlaceholder, { tab }),

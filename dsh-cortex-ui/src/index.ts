@@ -14,9 +14,12 @@
  * - POST /cortex/api/memory → { memory } 写 MEMORY.md（原子写，记忆手动编辑通道）
  * - POST /cortex/api/skill/locate → { name, open } 解析技能本地路径（skills.get），
  *   open=true 时在系统文件管理器定位（explorer /select）
+ * - GET  /cortex/api/staged → 待入库技能清单（pending/skills-staged）
+ * - POST /cortex/api/staged/promote → { name } 入库到 $DSH_HOME/skills
+ * - POST /cortex/api/staged/discard → { name } 丢弃（删除 staged 目录）
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { appendFileSync, mkdirSync, readFileSync, existsSync, writeFileSync, renameSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, existsSync, writeFileSync, renameSync, readdirSync, statSync, rmSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join, dirname } from 'node:path'
 // skills/change 事件声明合并（ctx.on）
@@ -127,6 +130,28 @@ function revealInExplorer(target: string): boolean {
   }
 }
 
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+/** 待入库技能清单（pending/skills-staged 下每个 <name>/SKILL.md 一项，按生成时间倒序）。 */
+function listStaged(stagedDir: string): Array<{ name: string; description: string; createdAt: number }> {
+  const rows: Array<{ name: string; description: string; createdAt: number }> = []
+  try {
+    if (!existsSync(stagedDir)) return rows
+    for (const entry of readdirSync(stagedDir)) {
+      const skillPath = join(stagedDir, entry, 'SKILL.md')
+      if (!existsSync(skillPath)) continue
+      try {
+        const raw = readFileSync(skillPath, 'utf8')
+        const name = /^name:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? entry
+        const description = /^description:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? ''
+        rows.push({ name, description, createdAt: statSync(skillPath).mtimeMs })
+      } catch { /* 单个技能不可读则跳过 */ }
+    }
+  } catch { /* staged 不可读 → 空清单 */ }
+  rows.sort((a, b) => b.createdAt - a.createdAt)
+  return rows
+}
+
 export function apply(ctx: Context, _config: unknown = {}): void {
   // 与 memory 插件同款路径解析：homePath = DSH_HOME > ~/.dsh；
   // 档案 = ctx.baseUrl 推导（preset 层通常在 profiles 之外 → default 档案）。
@@ -140,6 +165,9 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   const corePath = resolveCoreFile(homePath)
   // 容量上限持久化文件（与 memory 插件 apply 时读取的路径一致）
   const limitsPath = join(homePath, 'cortex-limits.json')
+  // 待入库技能目录与技能根（与 dsh-skill-forge 默认一致：pending/skills-staged → skills）
+  const stagedPath = join(homePath, 'pending', 'skills-staged')
+  const skillRootPath = join(homePath, 'skills')
   const logFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const log = (msg: string): void => {
     try {
@@ -156,7 +184,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, stagedPath, skillRootPath, log)
   }
 
   startHostBridge()
@@ -164,8 +192,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   ctx.effect(() => () => { clearInterval(bridgeTimer) })
 }
 
-/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, log: (m: string) => void): Promise<void> {
+/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + staged 管理 + skill/MCP 快照 */
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soul: '',
     soulPath,
@@ -365,6 +393,7 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     corePath: state.corePath,
     memoryLimit: memoryStore?.usage('memory').limit ?? 0,
     userLimit: memoryStore?.usage('user').limit ?? 0,
+    staged: listStaged(stagedPath),
     skills: state.skills,
     mcp: state.mcp,
     updatedAt: state.updatedAt,
@@ -511,6 +540,70 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
 
   ctx.effect(() => webServer.register({
     kind: 'exact',
+    path: '/cortex/api/staged',
+    handler: (_req, res) => json(res, 200, { ok: true, staged: listStaged(stagedPath) }),
+  }), 'dsh-cortex-ui: staged list route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/staged/promote',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data) as { name?: unknown }
+          const name = String(body.name ?? '').trim()
+          if (!SKILL_NAME_RE.test(name)) {
+            json(res, 400, { ok: false, error: 'invalid skill name' })
+            return
+          }
+          const src = join(stagedPath, name, 'SKILL.md')
+          if (!existsSync(src)) {
+            json(res, 404, { ok: false, error: 'staged skill not found' })
+            return
+          }
+          // 入库：原子写 $DSH_HOME/skills/<name>/SKILL.md（skill-filesystem 会经 Chokidar 触发 skills/change）
+          atomicWrite(join(skillRootPath, name, 'SKILL.md'), readFileSync(src, 'utf8'))
+          rmSync(dirname(src), { recursive: true, force: true })
+          log('staged promote: ' + name)
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: staged promote route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/staged/discard',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data) as { name?: unknown }
+          const name = String(body.name ?? '').trim()
+          if (!SKILL_NAME_RE.test(name)) {
+            json(res, 400, { ok: false, error: 'invalid skill name' })
+            return
+          }
+          rmSync(join(stagedPath, name), { recursive: true, force: true })
+          rmSync(join(stagedPath, `${name}.delete`), { force: true })
+          log('staged discard: ' + name)
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: staged discard route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
     path: '/cortex/api/skill/locate',
     handler: (req, res) => {
       let data = ''
@@ -543,5 +636,5 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     },
   }), 'dsh-cortex-ui: skill locate route')
 
-  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/core + /cortex/api/user + /cortex/api/memory + /cortex/api/limits + /cortex/api/skill/locate + /cortex/api/debug）')
+  log('webServer 路由已注册（/cortex/api/status + soul + core + user + memory + limits + staged(+promote/discard) + skill/locate + debug）')
 }

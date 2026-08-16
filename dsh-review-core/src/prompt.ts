@@ -26,7 +26,7 @@ export interface ReviewOutput {
 }
 
 /** review 提示词（要求只输出 JSON；画像抽取规则：只从用户本人消息抽取，不推断）。 */
-export function buildReviewPrompt(digestText: string): { system: string; user: string } {
+export function buildReviewPrompt(digestText: string, catalogText?: string): { system: string; user: string } {
   return {
     system: [
       'You review a completed conversation and extract reusable, durable experience.',
@@ -37,8 +37,11 @@ export function buildReviewPrompt(digestText: string): { system: string; user: s
       '  "user": [{"action":"add|replace|remove","content":"user-fact text","oldText":"optional"}]',
       '}',
       'Rules: skill only when the conversation demonstrates a reusable multi-step workflow; memory only for durable environment facts/conventions/lessons, verbatim; user only facts stated BY the user (never inferred from behavior). Output empty arrays / null when there is nothing new.',
+      'Skill naming: prefer reusing an existing skill name from the catalog below when the new learning belongs to the same class of task; only invent a NEW name when no existing skill covers the class. Never name a skill after a one-off session artifact (PR number, error string, "fix-X-today").',
     ].join('\n'),
-    user: digestText,
+    user: catalogText !== undefined && catalogText.length > 0
+      ? '## 现有技能目录（name: description）\n' + catalogText + '\n\n' + digestText
+      : digestText,
   }
 }
 

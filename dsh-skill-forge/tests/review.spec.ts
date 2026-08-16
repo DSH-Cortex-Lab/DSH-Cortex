@@ -12,7 +12,9 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import { SkillForge } from '../src/forge.ts'
 import {
   applyReviewOutput,
+  countTurnSignals,
   extractEarlySummary,
+  incrementalEntries,
   projectEntries,
   type MemoryStoreLike,
 } from '../src/review.ts'
@@ -38,8 +40,11 @@ function fakeStore(entries: string[] = []): MemoryStoreLike & { add: ReturnType<
   return store
 }
 
-function fakeForge(): { create: ReturnType<typeof vi.fn> } {
-  return { create: vi.fn(async () => ({ success: true, name: '', path: '' })) }
+function fakeForge(): { create: ReturnType<typeof vi.fn>; merge: ReturnType<typeof vi.fn> } {
+  return {
+    create: vi.fn(async () => ({ success: true, name: '', path: '' })),
+    merge: vi.fn(async () => ({ success: true, name: '', path: '' })),
+  }
 }
 
 describe('review ① 层 mock spec', () => {
@@ -68,14 +73,40 @@ describe('review ① 层 mock spec', () => {
     expect(extractEarlySummary(fakeSession([{ type: 'user/message' }]))).toBeUndefined()
   })
 
-  it('projectEntries 只取 user/assistant 文本消息', () => {
+  it('projectEntries 只取 user/assistant 文本消息，并带事件位置 seq', () => {
     const session = fakeSession([
       { type: 'user/message', data: { content: [{ type: 'text', text: 'hi' }], source: { kind: 'user' } } },
       { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'resp' }] } } },
       { type: 'tool/call' },
     ])
     const entries = projectEntries(session)
-    expect(entries).toEqual([{ role: 'user', text: 'hi' }, { role: 'assistant', text: 'resp' }])
+    expect(entries).toEqual([
+      { role: 'user', text: 'hi', seq: 0 },
+      { role: 'assistant', text: 'resp', seq: 1 },
+    ])
+  })
+
+  it('countTurnSignals 统计用户轮与工具调用（v2 节律计数）', () => {
+    const events = [
+      { type: 'user/message' },
+      { type: 'assistant/message' },
+      { type: 'tool/call' },
+      { type: 'tool/call' },
+      { type: 'user/message' },
+    ]
+    expect(countTurnSignals(events as never)).toEqual({ userTurns: 2, toolCalls: 2, lastEventSeq: 5 })
+  })
+
+  it('incrementalEntries 只保留 checkpoint 之后的新条目（v2 增量切窗）', () => {
+    const entries = [
+      { role: 'user' as const, text: 'old', seq: 0 },
+      { role: 'user' as const, text: 'new-1', seq: 4 },
+      { role: 'user' as const, text: 'new-2', seq: 6 },
+    ]
+    expect(incrementalEntries(entries, 4)).toEqual([
+      { role: 'user', text: 'new-1', seq: 4 },
+      { role: 'user', text: 'new-2', seq: 6 },
+    ])
   })
 
   it('applyReviewOutput：技能候选→forge.create；MEMORY add→store.add', async () => {
@@ -91,6 +122,43 @@ describe('review ① 层 mock spec', () => {
     // 自动生成技能统一加 -auto-save 名字后缀 + (Auto-save) 描述后缀
     expect(forge.create).toHaveBeenCalledWith(expect.objectContaining({ name: 's-auto-save', description: 'd (Auto-save)' }))
     expect(store.add).toHaveBeenCalledWith('memory', 'fact')
+  })
+
+  it('applyReviewOutput：同名技能 → forge.merge 合并而非新建（v2 写入层去重）', async () => {
+    const forge = fakeForge()
+    const output: ReviewOutput = {
+      skillCandidate: { name: 'existing-skill', description: 'updated', content: 'x'.repeat(300) },
+      memoryUpdates: [],
+      userUpdates: [],
+    }
+    applyReviewOutput(output, forge as unknown as SkillForge, undefined, {
+      reviewMinResultChars: 200,
+      dedupeSimilarity: 0.8,
+      catalog: [{ name: 'existing-skill-auto-save', description: '旧描述' }],
+    })
+    expect(forge.merge).toHaveBeenCalledTimes(1)
+    expect(forge.create).not.toHaveBeenCalled()
+    expect(forge.merge).toHaveBeenCalledWith('existing-skill-auto-save', expect.objectContaining({ description: 'updated (Auto-save)' }))
+  })
+
+  it('applyReviewOutput：描述相似 ≥ 阈值 → 跳过新建（v2 写入层去重）', async () => {
+    const forge = fakeForge()
+    const output: ReviewOutput = {
+      skillCandidate: {
+        name: 'another-name',
+        description: 'Deploy web apps to cloud servers with zero-downtime rollouts',
+        content: 'x'.repeat(300),
+      },
+      memoryUpdates: [],
+      userUpdates: [],
+    }
+    applyReviewOutput(output, forge as unknown as SkillForge, undefined, {
+      reviewMinResultChars: 200,
+      dedupeSimilarity: 0.8,
+      catalog: [{ name: 'deploy-web', description: 'Deploy web apps to cloud servers with zero-downtime rollouts and health checks' }],
+    })
+    expect(forge.create).not.toHaveBeenCalled()
+    expect(forge.merge).not.toHaveBeenCalled()
   })
 
   it('applyReviewOutput：reviewMinResultChars 过滤短技能、去重跳过重复 MEMORY、no-change 零写入', () => {

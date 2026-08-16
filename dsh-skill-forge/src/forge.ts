@@ -112,6 +112,31 @@ export class SkillForge {
   }
 
   /**
+   * 合并（v2 写入层去重）：同名技能已存在时，把 review 生成的内容作为新段落追加进既有正文
+   * （正文已包含相同段落时跳过追加），并可选更新 description → 写 staged。
+   */
+  async merge(name: string, patch: { description?: string; content: string }): Promise<ForgeResult> {
+    const existing = this.readExisting(name)
+    if (existing === undefined) return { success: false, name, error: `skill "${name}" not found` }
+    const description = patch.description !== undefined ? patch.description : existing.frontmatter.description
+    const body = existing.body.includes(patch.content)
+      ? existing.body
+      : existing.body + '\n\n' + patch.content
+    const errors = validateSkillInput({ name, description, content: body })
+    if (errors.length > 0) return { success: false, name, error: errors.join('; ') }
+    const text = renderSkillFile(
+      { name, description, ...(existing.frontmatter.whenToUse !== undefined ? { whenToUse: existing.frontmatter.whenToUse } : {}) },
+      body,
+    )
+    if (text.length > this.maxBytes) {
+      return { success: false, name, error: `skill exceeds the ${this.maxBytes}-byte limit` }
+    }
+    const path = this.stagedSkillPath(name)
+    this.atomicWrite(path, text)
+    return { success: true, name, path }
+  }
+
+  /**
    * 会话边界 promote：把 staged 技能原子落回首个扫描根、应用删除标记，然后清空 staged。
    * 落回会触发 skill-filesystem 的 Chokidar 监视 → `skills/change` → 目录消息更新（D3）。
    */

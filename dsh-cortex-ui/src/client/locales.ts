@@ -1,4 +1,4 @@
-﻿/**
+/**
  * dsh-cortex-ui 文案字典（namespace: cortex-ui）。
  * 双语平衡：zh 与 en 的 key 一一对应。
  */
@@ -29,6 +29,11 @@ export type CortexUiKey =
   | 'skill.heading'
   | 'skill.locateOpen'
   | 'skill.locateFailed'
+  | 'staged.heading'
+  | 'staged.empty'
+  | 'staged.promote'
+  | 'staged.discard'
+  | 'staged.discardConfirm'
   | 'user.intro'
   | 'user.placeholder'
   | 'memory.intro'
@@ -84,6 +89,11 @@ export const zh: CortexUiDict = {
   'skill.heading': '技能目录',
   'skill.locateOpen': '打开具体位置',
   'skill.locateFailed': '无法解析技能本地位置',
+  'staged.heading': '待入库（staged）',
+  'staged.empty': '暂无待入库技能（自动总结生成的技能会先出现在这里）',
+  'staged.promote': '入库',
+  'staged.discard': '丢弃',
+  'staged.discardConfirm': '确定丢弃技能 ',
   'user.intro': '用户画像（USER.md）记录关于用户的持久事实与偏好：称呼、背景、目标、约束。由记忆/复盘流程自动维护，也可在此手动编辑；保存后原子写回 USER.md，下次请求生效。',
   'user.placeholder': '在此编辑用户画像…',
   'memory.intro': '记忆（MEMORY.md）是 agent 的长期记忆：跨会话保留的关键事实、任务进展与经验教训。由复盘（review）流程自动写入，也可在此手动编辑；保存后原子写回 MEMORY.md，下次请求生效。',
@@ -138,6 +148,11 @@ export const en: CortexUiDict = {
   'skill.heading': 'Skill catalog',
   'skill.locateOpen': 'Open file location',
   'skill.locateFailed': 'Cannot resolve the local skill location',
+  'staged.heading': 'Staged (pending)',
+  'staged.empty': 'No staged skills (auto-review skills appear here first)',
+  'staged.promote': 'Promote',
+  'staged.discard': 'Discard',
+  'staged.discardConfirm': 'Discard skill ',
   'user.intro': 'The user profile (USER.md) holds durable facts and preferences about the user: name, background, goals, constraints. Maintained by the memory/review flows and editable here; saving writes USER.md atomically and takes effect on the next request.',
   'user.placeholder': 'Edit the user profile here…',
   'memory.intro': 'Memory (MEMORY.md) is the agent long-term memory: key facts, task progress, and lessons kept across sessions. Written automatically by the review flow and editable here; saving writes MEMORY.md atomically and takes effect on the next request.',

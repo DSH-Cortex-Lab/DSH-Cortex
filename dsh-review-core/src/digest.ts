@@ -8,10 +8,14 @@
 export interface DigestEntry {
   role: 'user' | 'assistant' | 'tool'
   text: string
+  /** 来源事件序号（review 集成层填入；用于 checkpoint 增量切窗）。 */
+  seq?: number
 }
 
 export interface ConversationDigest {
   recent: DigestEntry[]
+  /** 自上次 review checkpoint 以来的增量轮次（v2 节律机制；首轮 review 缺省）。 */
+  incremental?: DigestEntry[]
   summary?: string
   truncated: boolean
 }
@@ -33,9 +37,16 @@ export function buildConversationDigest(
   }
 }
 
-/** 渲染为 review 模型可见纯文本（无时间戳/路径，纯函数）。 */
+/** 渲染为 review 模型可见纯文本（无时间戳/路径，纯函数；增量段在前）。 */
 export function renderDigest(digest: ConversationDigest): string {
   const parts: string[] = []
+  if (digest.incremental !== undefined && digest.incremental.length > 0) {
+    parts.push('## 新增对话（自上次总结起）')
+    for (const entry of digest.incremental) {
+      parts.push(`[${entry.role}] ${entry.text}`)
+    }
+    parts.push('')
+  }
   if (digest.summary !== undefined) {
     parts.push('## 早期会话摘要', digest.summary, '')
   }

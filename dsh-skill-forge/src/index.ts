@@ -49,9 +49,11 @@ export interface Config {
   homePath: string
   skillRoot: string
   stagedDir: string
-  // review（D5/D6/D16/D27）
+  // review（v2 定稿：节律触发 + checkpoint，见 docs/自动技能化机制设计.md）
   reviewEnabled: boolean
-  reviewTrigger: 'turn-end' | 'batch' | 'session-end' | 'idle'
+  reviewTrigger: 'cadence' | 'session-end' | 'off'
+  reviewTurnInterval: number
+  reviewToolInterval: number
   reviewRecentTurns: number
   reviewMinResultChars: number
   dedupeSimilarity: number
@@ -68,7 +70,9 @@ export const Config: z<Config> = z.object({
   skillRoot: z.string().default(''),
   stagedDir: z.string().default(''),
   reviewEnabled: z.boolean().default(true),
-  reviewTrigger: z.union([z.const('turn-end'), z.const('batch'), z.const('session-end'), z.const('idle')]).default('session-end'),
+  reviewTrigger: z.union([z.const('cadence'), z.const('session-end'), z.const('off')]).default('cadence'),
+  reviewTurnInterval: z.number().default(10),
+  reviewToolInterval: z.number().default(10),
   reviewRecentTurns: z.number().default(8),
   reviewMinResultChars: z.number().default(200),
   dedupeSimilarity: z.number().default(0.8),
@@ -80,14 +84,15 @@ export function apply(ctx: Context, config: Config): void {
   const homePath = resolveHomePath(config.homePath)
   const skillRoot = config.skillRoot.length > 0 ? config.skillRoot : join(homePath, 'skills')
   const stagedDir = config.stagedDir.length > 0 ? config.stagedDir : join(homePath, 'pending', 'skills-staged')
+  const checkpointFile = join(homePath, 'pending', 'review-checkpoints.json')
   const forge = new SkillForge([{ path: skillRoot }], stagedDir, undefined, config.maxSkillBytes)
   registerSkillTools(ctx, forge)
   applyPromote(ctx, forge)
   cleanupStagedOnStartup(ctx, forge)
 
-  // 后台 review（D5：ctx.jobs 后台，不阻塞 agent 循环）
+  // 后台 review（v2：cadence 节律触发；D5 ctx.jobs 后台，不阻塞 agent 循环）
   // MEMORY 三路输出②需组合层 `ctx.provide('memoryStore', store)`（dsh-memory-harness 提供），缺省则仅技能路输出。
-  if (config.reviewEnabled && config.reviewProvider.length > 0 && config.reviewModel.length > 0) {
+  if (config.reviewEnabled && config.reviewTrigger !== 'off' && config.reviewProvider.length > 0 && config.reviewModel.length > 0) {
     const memoryStore = ctx.get('memoryStore') as MemoryStoreLike | undefined
     const engine = new ReviewEngine(
       ctx,
@@ -96,6 +101,8 @@ export function apply(ctx: Context, config: Config): void {
       {
         reviewEnabled: config.reviewEnabled,
         reviewTrigger: config.reviewTrigger,
+        reviewTurnInterval: config.reviewTurnInterval,
+        reviewToolInterval: config.reviewToolInterval,
         reviewRecentTurns: config.reviewRecentTurns,
         reviewMinResultChars: config.reviewMinResultChars,
         dedupeSimilarity: config.dedupeSimilarity,
@@ -103,6 +110,7 @@ export function apply(ctx: Context, config: Config): void {
       },
       config.reviewProvider,
       config.reviewModel,
+      checkpointFile,
     )
     engine.attach()
   }
