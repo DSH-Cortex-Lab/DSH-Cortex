@@ -19,15 +19,13 @@ export type CortexUiKey =
   | 'persona.soulName'
   | 'persona.soulBadge'
   | 'persona.soulStatus'
-  | 'persona.soulDesc'
+  | 'persona.soulPlaceholder'
   | 'persona.coreName'
   | 'persona.coreBadge'
-  | 'persona.coreDesc'
-  | 'persona.coreId'
+  | 'persona.coreGuide'
+  | 'persona.corePlaceholder'
   | 'persona.noBridge'
   | 'persona.chars'
-  | 'persona.loaded'
-  | 'persona.none'
   | 'skill.intro'
   | 'skill.heading'
   | 'skill.locateOpen'
@@ -68,21 +66,19 @@ export const zh: CortexUiDict = {
   'tab.skill': 'skill',
   'tab.mcp': 'MCP',
   'persona.title': '人格',
-  'persona.intro': '人格分两层：SOUL 是档案级人格；core:personality 是机器级公共底线人格。编辑与保存功能后续接入，当前为排版预览。',
+  'persona.intro': '人格分两层：SOUL 是档案级人格；core:personality 是机器级公共底线。两层都可在此编辑，保存后原子写回对应文件，懒重载下一条请求生效。',
   'persona.groupArchive': '档案人格',
-  'persona.groupBaseline': '公共底线人格',
+  'persona.groupBaseline': '机器底线',
   'persona.soulName': 'SOUL',
   'persona.soulBadge': '档案级',
   'persona.soulStatus': '懒重载生效中',
-  'persona.soulDesc': '定义「我是谁、我怎么说」——身份、行为准则、沟通风格。每次会话按 SOUL.md 懒重载，改文件即时生效。',
+  'persona.soulPlaceholder': '在此编辑档案人格（SOUL）…',
   'persona.coreName': 'core:personality',
-  'persona.coreBadge': '机器级 · 只读',
-  'persona.coreDesc': '机器级静态人格，所有档案与 agent 共享（order -90），单一来源，不可在此编辑。',
-  'persona.coreId': 'order -90 · 全局静态 · 来源：dsh-memory-harness',
+  'persona.coreBadge': '机器底线 · 可编辑',
+  'persona.coreGuide': '底线守则默认不动；要改你的主要人格请编辑档案人格（SOUL）。',
+  'persona.corePlaceholder': '在此编辑机器底线守则…',
   'persona.noBridge': '（未连接 host 桥）',
   'persona.chars': '字符',
-  'persona.loaded': '已加载',
-  'persona.none': '未提供',
   'skill.intro': '来自 ctx.skills 读端（filesystem provider 扫描 $DSH_HOME/skills、项目 .dsh/skills、~/.agents 与 bundled 技能，rank 100–600）。',
   'skill.heading': '技能目录',
   'skill.locateOpen': '打开具体位置',
@@ -122,21 +118,19 @@ export const en: CortexUiDict = {
   'tab.skill': 'skill',
   'tab.mcp': 'MCP',
   'persona.title': 'Persona',
-  'persona.intro': 'Two persona layers: SOUL is the archive-level persona; core:personality is the machine-level baseline. Editing and saving are coming later — layout preview for now.',
+  'persona.intro': 'Two persona layers: SOUL is the archive-level persona; core:personality is the machine-level baseline. Both are editable here; saving writes the file atomically and lazy reload applies it on the next request.',
   'persona.groupArchive': 'Archive persona',
   'persona.groupBaseline': 'Machine baseline',
   'persona.soulName': 'SOUL',
   'persona.soulBadge': 'Archive',
   'persona.soulStatus': 'Lazy reload active',
-  'persona.soulDesc': 'Defines "who I am and how I speak" — identity, conduct, tone. Lazy-reloaded from SOUL.md every session; file edits take effect immediately.',
+  'persona.soulPlaceholder': 'Edit the archive persona (SOUL) here…',
   'persona.coreName': 'core:personality',
-  'persona.coreBadge': 'Machine · read-only',
-  'persona.coreDesc': 'Machine-level static persona, shared by all archives and agents (order -90), single source, not editable here.',
-  'persona.coreId': 'order -90 · global static · source: dsh-memory-harness',
+  'persona.coreBadge': 'Machine baseline · editable',
+  'persona.coreGuide': 'Leave the baseline alone by default; edit the archive persona (SOUL) to change your main personality.',
+  'persona.corePlaceholder': 'Edit the machine baseline rules here…',
   'persona.noBridge': '(host bridge not connected)',
   'persona.chars': 'chars',
-  'persona.loaded': 'Loaded',
-  'persona.none': 'Not provided',
   'skill.intro': 'From the ctx.skills read side (the filesystem provider scans $DSH_HOME/skills, project .dsh/skills, ~/.agents, and bundled skills; ranks 100–600).',
   'skill.heading': 'Skill catalog',
   'skill.locateOpen': 'Open file location',

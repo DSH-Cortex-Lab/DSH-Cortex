@@ -2,7 +2,7 @@
  * @dsh-cortex/dsh-cortex-ui — 浏览器端：侧栏"设置上方"入口 + 全屏 overlay 管理面板。
  *
  * 五 tab：人格 / 记忆 / 用户画像 / 技能 / MCP。
- * 数据通道：GET /cortex/api/status + POST /cortex/api/soul +
+ * 数据通道：GET /cortex/api/status + POST /cortex/api/soul + POST /cortex/api/core +
  * POST /cortex/api/user + POST /cortex/api/memory +
  * POST /cortex/api/skill/locate（webServer 路由，preset 层实例注册）；轮询 5s 刷新。
  *
@@ -85,6 +85,7 @@ interface CortexStatus {
   memory: string
   memoryPath: string
   core: string
+  corePath: string
   skills: SkillRow[]
   mcp: McpRow[]
   updatedAt: number
@@ -171,7 +172,7 @@ const closeBtn: React.CSSProperties = {
   color: 'var(--dsw-alias-label-primary)',
 }
 
-// ── 人格 tab：Agent 预设同款卡片排版 ──
+// ── 人格 tab：两层人格排版（SOUL / core 各一个 FileEditor）──
 const section: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 720,
   color: 'var(--dsw-alias-label-primary)',
@@ -184,23 +185,7 @@ const groupHead: React.CSSProperties = {
   margin: 0, fontSize: 12, fontWeight: 600, letterSpacing: '.06em',
   textTransform: 'uppercase', color: 'var(--dsw-alias-label-tertiary)',
 }
-const cards: React.CSSProperties = {
-  listStyle: 'none', margin: 0, padding: 0, display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(268px, 1fr))',
-  gridAutoRows: '1fr', gap: 12,
-}
-const card: React.CSSProperties = {
-  border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12,
-  display: 'flex', flexDirection: 'column', background: 'var(--dsw-alias-bg-layer-3)',
-  transition: 'border-color .16s, background .16s',
-}
-const cardMain: React.CSSProperties = {
-  flex: 1, appearance: 'none', border: 0, background: 'none',
-  font: 'inherit', color: 'inherit', textAlign: 'left',
-  display: 'flex', flexDirection: 'column', gap: 8,
-  padding: '14px 16px 12px', borderRadius: '12px 12px 0 0',
-}
-const cardHead: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 }
+const personaHead: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 }
 const cardName: React.CSSProperties = { fontSize: 15, fontWeight: 600, lineHeight: 1.4 }
 const badge: React.CSSProperties = {
   borderRadius: 999, padding: '1px 8px', fontSize: 11, lineHeight: '17px',
@@ -208,72 +193,42 @@ const badge: React.CSSProperties = {
   border: '1px solid var(--dsw-alias-border-l2)',
   color: 'var(--dsw-alias-label-tertiary)',
 }
-const inUse: React.CSSProperties = {
-  ...badge, marginLeft: 'auto', border: 'none',
-  background: 'var(--dsw-alias-label-primary)', color: 'var(--dsw-alias-bg-layer-3)',
-}
-const cardDesc: React.CSSProperties = {
-  fontSize: 13, lineHeight: 1.55, color: 'var(--dsw-alias-label-secondary)',
-  minHeight: 42, overflow: 'hidden', overflowWrap: 'anywhere',
-  display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 4,
-} as React.CSSProperties
-const cardId: React.CSSProperties = {
-  marginTop: 'auto',
-  fontFamily: 'var(--dsw-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)',
-  fontSize: 11, color: 'var(--dsw-alias-label-dimmed)',
-  overflowWrap: 'anywhere',
-}
-const cardFoot: React.CSSProperties = {
-  display: 'flex', justifyContent: 'flex-end', gap: 2, padding: '6px 10px',
-  borderTop: '1px solid var(--dsw-alias-border-l2)',
-}
 
-/** 人格 tab（排版还原；编辑写入后续接入） */
+/** 人格 tab：SOUL（档案人格）与 core（机器底线）两层，均可编辑（FileEditor + 原子写 + 懒重载） */
 function PersonaTab({ status }: { status: CortexStatus | null }): React.ReactElement {
-  const soulPath = status?.soulPath ?? ''
-  const soulChars = status?.soul?.length ?? 0
   return createElement('div', { style: section },
     createElement('h2', { style: title }, t('persona.title')),
     createElement('p', { style: intro },
       t('persona.intro')),
     createElement('section', { style: group },
       createElement('h3', { style: groupHead }, t('persona.groupArchive')),
-      createElement('ul', { style: cards },
-        createElement('li', { style: card },
-          createElement('div', { style: cardMain },
-            createElement('span', { style: cardHead },
-              createElement('span', { style: cardName }, t('persona.soulName')),
-              createElement('span', { style: badge }, t('persona.soulBadge')),
-              createElement('span', { style: inUse }, status ? t('persona.soulStatus') : t('list.loading')),
-            ),
-            createElement('span', { style: cardDesc },
-              t('persona.soulDesc')),
-            createElement('code', { style: cardId }, soulPath || t('persona.noBridge')),
-          ),
-          createElement('div', { style: cardFoot },
-            createElement('span', { style: { ...badge, border: 'none' } }, soulChars + ' ' + t('persona.chars')),
-          ),
-        ),
+      createElement('div', { style: personaHead },
+        createElement('span', { style: cardName }, t('persona.soulName')),
+        createElement('span', { style: badge }, t('persona.soulBadge')),
+        createElement('span', { style: badge }, status ? t('persona.soulStatus') : t('list.loading')),
       ),
+      createElement(FileEditor, {
+        value: status?.soul ?? '',
+        path: status?.soulPath ?? '',
+        endpoint: '/cortex/api/soul',
+        field: 'soul',
+        placeholder: t('persona.soulPlaceholder'),
+      }),
     ),
     createElement('section', { style: groupExtra },
       createElement('h3', { style: groupHead }, t('persona.groupBaseline')),
-      createElement('ul', { style: cards },
-        createElement('li', { style: card },
-          createElement('div', { style: cardMain },
-            createElement('span', { style: cardHead },
-              createElement('span', { style: cardName }, t('persona.coreName')),
-              createElement('span', { style: badge }, t('persona.coreBadge')),
-            ),
-            createElement('span', { style: cardDesc },
-              t('persona.coreDesc')),
-            createElement('code', { style: cardId }, t('persona.coreId')),
-          ),
-          createElement('div', { style: cardFoot },
-            createElement('span', { style: { ...badge, border: 'none' } }, status?.core ? t('persona.loaded') : t('persona.none')),
-          ),
-        ),
+      createElement('div', { style: personaHead },
+        createElement('span', { style: cardName }, t('persona.coreName')),
+        createElement('span', { style: badge }, t('persona.coreBadge')),
       ),
+      createElement('p', { style: intro }, t('persona.coreGuide')),
+      createElement(FileEditor, {
+        value: status?.core ?? '',
+        path: status?.corePath ?? '',
+        endpoint: '/cortex/api/core',
+        field: 'core',
+        placeholder: t('persona.corePlaceholder'),
+      }),
     ),
   )
 }

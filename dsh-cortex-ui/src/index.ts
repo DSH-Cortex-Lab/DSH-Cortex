@@ -7,8 +7,9 @@
  *
  * 数据通道：webServer HTTP（settings 通道有实例隔离问题——include/preset 子世界
  * 注册的 namespace 对根 settings 不可见）。client 端 fetch 下列路由：
- * - GET  /cortex/api/status → { soul, soulPath, user, userPath, memory, memoryPath, core, skills, mcp, updatedAt }
+ * - GET  /cortex/api/status → { soul, soulPath, user, userPath, memory, memoryPath, core, corePath, skills, mcp, updatedAt }
  * - POST /cortex/api/soul   → { soul } 写 SOUL.md（原子写，memory 插件懒重载生效）
+ * - POST /cortex/api/core   → { core } 写 core-personality.md（原子写，懒重载生效）
  * - POST /cortex/api/user   → { user } 写 USER.md（原子写，用户画像手动编辑通道）
  * - POST /cortex/api/memory → { memory } 写 MEMORY.md（原子写，记忆手动编辑通道）
  * - POST /cortex/api/skill/locate → { name, open } 解析技能本地路径（skills.get），
@@ -22,6 +23,7 @@ import { join, dirname } from 'node:path'
 import type {} from '@deepseek-ai/dsh-skill'
 import {
   CORE_PERSONALITY_TEXT,
+  resolveCoreFile,
   resolveHomePath,
   resolveMemoryPaths,
   resolveProcessProfile,
@@ -134,6 +136,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   const soulPath = memoryPaths.soulFile
   const userPath = memoryPaths.userFile
   const memoryPath = memoryPaths.memoryFile
+  // core-personality.md 固定在 $DSH_HOME 根（全局、跨档案，不随 profile）
+  const corePath = resolveCoreFile(homePath)
   const logFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const log = (msg: string): void => {
     try {
@@ -150,7 +154,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, memoryPath, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, log)
   }
 
   startHostBridge()
@@ -158,8 +162,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   ctx.effect(() => () => { clearInterval(bridgeTimer) })
 }
 
-/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY 同步 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, log: (m: string) => void): Promise<void> {
+/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + skill/MCP 快照 */
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soul: '',
     soulPath,
@@ -168,12 +172,13 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     memory: '',
     memoryPath,
     core: CORE_PERSONALITY_TEXT,
+    corePath,
     skills: [] as SkillRow[],
     mcp: [] as McpRow[],
     updatedAt: 0,
   }
 
-  // 初始读 SOUL.md / USER.md / MEMORY.md
+  // 初始读 SOUL.md / USER.md / MEMORY.md / core-personality.md
   try {
     state.soul = existsSync(soulPath) ? readFileSync(soulPath, 'utf8') : ''
   } catch (e) {
@@ -188,6 +193,11 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     state.memory = existsSync(memoryPath) ? readFileSync(memoryPath, 'utf8') : ''
   } catch (e) {
     log('memory init error: ' + String(e))
+  }
+  try {
+    state.core = existsSync(corePath) ? readFileSync(corePath, 'utf8') : CORE_PERSONALITY_TEXT
+  } catch (e) {
+    log('core init error: ' + String(e))
   }
 
   // ── skill / MCP 快照 ──
@@ -292,6 +302,7 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     memory: state.memory,
     memoryPath: state.memoryPath,
     core: state.core,
+    corePath: state.corePath,
     skills: state.skills,
     mcp: state.mcp,
     updatedAt: state.updatedAt,
@@ -324,6 +335,28 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
       req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
     },
   }), 'dsh-cortex-ui: soul route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/core',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data)
+          const text = String(body.core ?? '')
+          atomicWrite(corePath, text)
+          state.core = text
+          log('core-personality.md written via API (' + text.length + ' chars)')
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: core route')
 
   ctx.effect(() => webServer.register({
     kind: 'exact',
@@ -403,5 +436,5 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     },
   }), 'dsh-cortex-ui: skill locate route')
 
-  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/user + /cortex/api/memory + /cortex/api/skill/locate）')
+  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/core + /cortex/api/user + /cortex/api/memory + /cortex/api/skill/locate）')
 }
