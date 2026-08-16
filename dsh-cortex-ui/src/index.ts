@@ -7,9 +7,10 @@
  *
  * 数据通道：webServer HTTP（settings 通道有实例隔离问题——include/preset 子世界
  * 注册的 namespace 对根 settings 不可见）。client 端 fetch 下列路由：
- * - GET  /cortex/api/status → { soul, soulPath, user, userPath, core, skills, mcp, updatedAt }
+ * - GET  /cortex/api/status → { soul, soulPath, user, userPath, memory, memoryPath, core, skills, mcp, updatedAt }
  * - POST /cortex/api/soul   → { soul } 写 SOUL.md（原子写，memory 插件懒重载生效）
  * - POST /cortex/api/user   → { user } 写 USER.md（原子写，用户画像手动编辑通道）
+ * - POST /cortex/api/memory → { memory } 写 MEMORY.md（原子写，记忆手动编辑通道）
  * - POST /cortex/api/skill/locate → { name, open } 解析技能本地路径（skills.get），
  *   open=true 时在系统文件管理器定位（explorer /select）
  */
@@ -132,6 +133,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   const memoryPaths = resolveMemoryPaths(homePath, processProfile)
   const soulPath = memoryPaths.soulFile
   const userPath = memoryPaths.userFile
+  const memoryPath = memoryPaths.memoryFile
   const logFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const log = (msg: string): void => {
     try {
@@ -148,7 +150,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, log)
   }
 
   startHostBridge()
@@ -156,20 +158,22 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   ctx.effect(() => () => { clearInterval(bridgeTimer) })
 }
 
-/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER 同步 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, log: (m: string) => void): Promise<void> {
+/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY 同步 + skill/MCP 快照 */
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soul: '',
     soulPath,
     user: '',
     userPath,
+    memory: '',
+    memoryPath,
     core: CORE_PERSONALITY_TEXT,
     skills: [] as SkillRow[],
     mcp: [] as McpRow[],
     updatedAt: 0,
   }
 
-  // 初始读 SOUL.md / USER.md
+  // 初始读 SOUL.md / USER.md / MEMORY.md
   try {
     state.soul = existsSync(soulPath) ? readFileSync(soulPath, 'utf8') : ''
   } catch (e) {
@@ -179,6 +183,11 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     state.user = existsSync(userPath) ? readFileSync(userPath, 'utf8') : ''
   } catch (e) {
     log('user init error: ' + String(e))
+  }
+  try {
+    state.memory = existsSync(memoryPath) ? readFileSync(memoryPath, 'utf8') : ''
+  } catch (e) {
+    log('memory init error: ' + String(e))
   }
 
   // ── skill / MCP 快照 ──
@@ -280,6 +289,8 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     soulPath: state.soulPath,
     user: state.user,
     userPath: state.userPath,
+    memory: state.memory,
+    memoryPath: state.memoryPath,
     core: state.core,
     skills: state.skills,
     mcp: state.mcp,
@@ -338,6 +349,28 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
 
   ctx.effect(() => webServer.register({
     kind: 'exact',
+    path: '/cortex/api/memory',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data)
+          const text = String(body.memory ?? '')
+          atomicWrite(memoryPath, text)
+          state.memory = text
+          log('MEMORY.md written via API (' + text.length + ' chars)')
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: memory route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
     path: '/cortex/api/skill/locate',
     handler: (req, res) => {
       let data = ''
@@ -370,5 +403,5 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     },
   }), 'dsh-cortex-ui: skill locate route')
 
-  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/user + /cortex/api/skill/locate）')
+  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/user + /cortex/api/memory + /cortex/api/skill/locate）')
 }

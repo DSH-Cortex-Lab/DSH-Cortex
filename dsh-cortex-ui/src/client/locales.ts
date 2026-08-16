@@ -34,10 +34,12 @@ export type CortexUiKey =
   | 'skill.locateFailed'
   | 'user.intro'
   | 'user.placeholder'
-  | 'user.save'
-  | 'user.saving'
-  | 'user.saved'
-  | 'user.saveFailed'
+  | 'memory.intro'
+  | 'memory.placeholder'
+  | 'editor.save'
+  | 'editor.saving'
+  | 'editor.saved'
+  | 'editor.saveFailed'
   | 'mcp.intro'
   | 'mcp.heading'
   | 'list.search'
@@ -87,10 +89,12 @@ export const zh: CortexUiDict = {
   'skill.locateFailed': '无法解析技能本地位置',
   'user.intro': '用户画像（USER.md）记录关于用户的持久事实与偏好：称呼、背景、目标、约束。由记忆/复盘流程自动维护，也可在此手动编辑；保存后原子写回 USER.md，下次请求生效。',
   'user.placeholder': '在此编辑用户画像…',
-  'user.save': '保存',
-  'user.saving': '保存中…',
-  'user.saved': '已保存',
-  'user.saveFailed': '保存失败：',
+  'memory.intro': '记忆（MEMORY.md）是 agent 的长期记忆：跨会话保留的关键事实、任务进展与经验教训。由复盘（review）流程自动写入，也可在此手动编辑；保存后原子写回 MEMORY.md，下次请求生效。',
+  'memory.placeholder': '在此编辑记忆…',
+  'editor.save': '保存',
+  'editor.saving': '保存中…',
+  'editor.saved': '已保存',
+  'editor.saveFailed': '保存失败：',
   'mcp.intro': '来自 loader 装配的 mcp-client 插件实例（每个实例连接一个 MCP 服务器，工具以 mcp__<server>__<tool> 暴露）。',
   'mcp.heading': 'MCP 服务器',
   'list.search': '搜索',
@@ -139,10 +143,12 @@ export const en: CortexUiDict = {
   'skill.locateFailed': 'Cannot resolve the local skill location',
   'user.intro': 'The user profile (USER.md) holds durable facts and preferences about the user: name, background, goals, constraints. Maintained by the memory/review flows and editable here; saving writes USER.md atomically and takes effect on the next request.',
   'user.placeholder': 'Edit the user profile here…',
-  'user.save': 'Save',
-  'user.saving': 'Saving…',
-  'user.saved': 'Saved',
-  'user.saveFailed': 'Save failed: ',
+  'memory.intro': 'Memory (MEMORY.md) is the agent long-term memory: key facts, task progress, and lessons kept across sessions. Written automatically by the review flow and editable here; saving writes MEMORY.md atomically and takes effect on the next request.',
+  'memory.placeholder': 'Edit memory here…',
+  'editor.save': 'Save',
+  'editor.saving': 'Saving…',
+  'editor.saved': 'Saved',
+  'editor.saveFailed': 'Save failed: ',
   'mcp.intro': 'From the mcp-client plugin instances in the loader assembly (each instance connects to one MCP server; tools are exposed as mcp__<server>__<tool>).',
   'mcp.heading': 'MCP servers',
   'list.search': 'Search',

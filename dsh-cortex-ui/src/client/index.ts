@@ -3,8 +3,8 @@
  *
  * 五 tab：人格 / 记忆 / 用户画像 / 技能 / MCP。
  * 数据通道：GET /cortex/api/status + POST /cortex/api/soul +
- * POST /cortex/api/user + POST /cortex/api/skill/locate
- * （webServer 路由，preset 层实例注册）；轮询 5s 刷新。
+ * POST /cortex/api/user + POST /cortex/api/memory +
+ * POST /cortex/api/skill/locate（webServer 路由，preset 层实例注册）；轮询 5s 刷新。
  *
  * 入口：sidebar.footer.action（官方注释：Footer actions stack above Settings）
  * 样式对齐 ui-settings 的 trigger 行：14px、圆角 12、悬停
@@ -82,6 +82,8 @@ interface CortexStatus {
   soulPath: string
   user: string
   userPath: string
+  memory: string
+  memoryPath: string
   core: string
   skills: SkillRow[]
   mcp: McpRow[]
@@ -461,15 +463,15 @@ function FileEditor({ value, path, endpoint, field, placeholder }: FileEditorPro
     }),
     createElement('div', { style: editorFoot },
       createElement('code', { style: { ...rowDetailCode, flex: 1 } }, path || t('persona.noBridge')),
-      phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, t('user.saveFailed') + errMsg) : null,
-      phase === 'saved' ? createElement('span', { style: saveNote }, t('user.saved')) : null,
+      phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, t('editor.saveFailed') + errMsg) : null,
+      phase === 'saved' ? createElement('span', { style: saveNote }, t('editor.saved')) : null,
       createElement('span', { style: saveNote }, draft.length + ' ' + t('persona.chars')),
       createElement('button', {
         type: 'button',
         style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
         disabled: phase === 'saving',
         onClick: save,
-      }, phase === 'saving' ? t('user.saving') : t('user.save'))),
+      }, phase === 'saving' ? t('editor.saving') : t('editor.save'))),
   )
 }
 
@@ -483,6 +485,19 @@ function UserTab({ status }: { status: CortexStatus | null }): React.ReactElemen
       endpoint: '/cortex/api/user',
       field: 'user',
       placeholder: t('user.placeholder'),
+    }))
+}
+
+/** 记忆 tab：MEMORY.md 编辑器 */
+function MemoryTab({ status }: { status: CortexStatus | null }): React.ReactElement {
+  return createElement('div', null,
+    createElement('p', { style: statusText }, t('memory.intro')),
+    createElement(FileEditor, {
+      value: status?.memory ?? '',
+      path: status?.memoryPath ?? '',
+      endpoint: '/cortex/api/memory',
+      field: 'memory',
+      placeholder: t('memory.placeholder'),
     }))
 }
 
@@ -635,13 +650,15 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
             ? createElement('p', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 13 } }, t('channelError') + error)
             : tab === 'persona'
               ? createElement(PersonaTab, { status })
-              : tab === 'user'
-                ? createElement(UserTab, { status })
-                : tab === 'skill'
-                  ? createElement(SkillTab, { status })
-                  : tab === 'mcp'
-                    ? createElement(McpTab, { status })
-                    : createElement(TabPlaceholder, { tab }),
+              : tab === 'memory'
+                ? createElement(MemoryTab, { status })
+                : tab === 'user'
+                  ? createElement(UserTab, { status })
+                  : tab === 'skill'
+                    ? createElement(SkillTab, { status })
+                    : tab === 'mcp'
+                      ? createElement(McpTab, { status })
+                      : createElement(TabPlaceholder, { tab }),
         ),
       ),
     ),
