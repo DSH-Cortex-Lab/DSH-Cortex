@@ -58,8 +58,8 @@ export function parseReviewOutput(text: string): ReviewOutput | undefined {
   if (typeof parsed !== 'object' || parsed === null) return undefined
   const data = parsed as Record<string, unknown>
   const skill = normalizeSkillCandidate(data.skill)
-  const memoryUpdates = normalizeUpdates(data.memory)
-  const userUpdates = normalizeUpdates(data.user)
+  const memoryUpdates = normalizeUpdates(data.memory, 'memory')
+  const userUpdates = normalizeUpdates(data.user, 'user')
   return { ...(skill !== undefined ? { skillCandidate: skill } : {}), memoryUpdates, userUpdates }
 }
 
@@ -71,7 +71,7 @@ function normalizeSkillCandidate(value: unknown): SkillCandidate | undefined {
   return { name: data.name, description: data.description, ...(whenToUse !== undefined ? { whenToUse } : {}), content: data.content }
 }
 
-function normalizeUpdates(value: unknown): MemoryUpdate[] {
+function normalizeUpdates(value: unknown, target: 'memory' | 'user'): MemoryUpdate[] {
   if (!Array.isArray(value)) return []
   const updates: MemoryUpdate[] = []
   for (const item of value) {
@@ -80,7 +80,7 @@ function normalizeUpdates(value: unknown): MemoryUpdate[] {
     if (data.action !== 'add' && data.action !== 'replace' && data.action !== 'remove') continue
     if (typeof data.content !== 'string' || data.content.length === 0) continue
     const oldText = typeof data.oldText === 'string' ? data.oldText : undefined
-    updates.push({ action: data.action, target: 'memory', content: data.content, ...(oldText !== undefined ? { oldText } : {}) })
+    updates.push({ action: data.action, target, content: data.content, ...(oldText !== undefined ? { oldText } : {}) })
   }
   return updates
 }

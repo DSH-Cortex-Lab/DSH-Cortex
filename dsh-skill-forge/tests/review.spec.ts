@@ -52,6 +52,10 @@ describe('review ① 层 mock spec', () => {
     const output = parseReviewOutput('{"skill":{"name":"s","description":"d","content":"c"},"memory":[{"action":"add","content":"f"}],"user":[]}')
     expect(output?.skillCandidate?.name).toBe('s')
     expect(output?.memoryUpdates).toHaveLength(1)
+    expect(output?.memoryUpdates[0]?.target).toBe('memory')
+    const withUser = parseReviewOutput('{"skill":null,"memory":[],"user":[{"action":"add","content":"用户偏好 x"}]}')
+    expect(withUser?.userUpdates).toHaveLength(1)
+    expect(withUser?.userUpdates[0]?.target).toBe('user')
     expect(parseReviewOutput('```json\n{"skill":null,"memory":[],"user":[]}\n```')?.memoryUpdates).toEqual([])
     expect(parseReviewOutput('not json')).toBeUndefined()
   })
@@ -198,5 +202,17 @@ describe('review ① 层 mock spec', () => {
     expect(store.replace).toHaveBeenCalledWith('memory', 'old', 'new fact')
     expect(store.remove).toHaveBeenCalledWith('memory', 'new fact')
     expect(onWrite).toHaveBeenCalledTimes(2)
+  })
+
+  it('applyReviewOutput：USER 更新走 store target=user（M1b 三路输出③已启用）', () => {
+    const store = fakeStore()
+    const onWrite = vi.fn<(u: MemoryUpdate) => void>()
+    const output: ReviewOutput = {
+      memoryUpdates: [],
+      userUpdates: [{ action: 'add', target: 'user', content: '用户叫蓝天' }],
+    }
+    applyReviewOutput(output, fakeForge() as unknown as SkillForge, store, { reviewMinResultChars: 200, dedupeSimilarity: 0.8 }, onWrite)
+    expect(store.add).toHaveBeenCalledWith('user', '用户叫蓝天')
+    expect(onWrite).toHaveBeenCalledTimes(1)
   })
 })

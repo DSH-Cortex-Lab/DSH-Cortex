@@ -146,12 +146,14 @@ function digestOf(entries: readonly DigestEntry[]): string {
 /** 增量窗口上限：首次 review（无 checkpoint）的大历史会话不一次全量重放。 */
 const INCREMENTAL_CAP = 60
 
-async function collectText(stream: AsyncIterable<StreamChunk>): Promise<string> {
+async function collectText(stream: AsyncIterable<StreamChunk>): Promise<{ text: string; finish: string }> {
   let text = ''
+  let finish = 'none'
   for await (const chunk of stream) {
     if (chunk.type === 'text-delta') text += chunk.text
+    else if (chunk.type === 'finish') finish = JSON.stringify(chunk.reason)
   }
-  return text
+  return { text, finish }
 }
 
 export class ReviewEngine {
@@ -268,10 +270,10 @@ export class ReviewEngine {
         })),
         timeout,
       ])
-      this.activity(`run: llm finished (${text.length} chars)`)
-      const output = parseReviewOutput(text)
+      this.activity(`run: llm finished (${text.text.length} chars, finish=${text.finish})`)
+      const output = parseReviewOutput(text.text)
       if (output === undefined) {
-        throw new Error(`review output was not parseable JSON (got ${text.length} chars)`)
+        throw new Error(`review output was not parseable JSON (got ${text.text.length} chars)`)
       }
       this.apply(output, catalog)
       this.activity('run: output applied')
@@ -426,6 +428,18 @@ export function applyReviewOutput(
       if (store.remove('memory', update.oldText).success) onMemoryWrite?.(update)
     } else if (update.action === 'replace' && update.oldText !== undefined) {
       if (store.replace('memory', update.oldText, update.content).success) onMemoryWrite?.(update)
+    }
+  }
+  // 三路输出③：用户画像更新（M1b 已启用——与 MEMORY 同款去重 + 审计）
+  const userEntries = store.snapshot('user').entries
+  for (const update of output.userUpdates) {
+    if (update.action === 'add') {
+      if (isDuplicate(update.content, userEntries, config.dedupeSimilarity)) continue
+      if (store.add('user', update.content).success) onMemoryWrite?.(update)
+    } else if (update.action === 'remove' && update.oldText !== undefined) {
+      if (store.remove('user', update.oldText).success) onMemoryWrite?.(update)
+    } else if (update.action === 'replace' && update.oldText !== undefined) {
+      if (store.replace('user', update.oldText, update.content).success) onMemoryWrite?.(update)
     }
   }
 }
