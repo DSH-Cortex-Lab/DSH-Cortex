@@ -1,0 +1,18 @@
+# 过程文档（开发计划 / 任务清单 / 里程碑报告 / 验收报告与材料 / 交接）
+docs/
+
+# Node 依赖与构建产物
+node_modules/
+lib/
+*.tsbuildinfo
+
+# 本地编译临时产物（沙箱 tsc 输出）
+.runtime/
+
+# 验收备份
+.acceptance-backup/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+*.log

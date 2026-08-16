@@ -1,0 +1,21 @@
+{
+  "name": "dsh-hello-tool",
+  "version": "0.1.0",
+  "description": "M0 验证插件：注册 hello 工具，验证 dsh Cordis 工具装配链路",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  }
+}

@@ -1,0 +1,11 @@
+# dsh-hello-tool 装配补丁（可选路径 B，与 dsh.profile.bundles 二选一）。
+#
+# 路径 A（推荐，简单宿主工具插件）：在 profile 的 package.json 中
+#   1) dependencies 增加 `"dsh-hello-tool": "link:<本包绝对路径>"`
+#   2) dsh.profile.bundles 数组追加 `"dsh-hello-tool"`
+#   dsh 启动即加载本包 apply(ctx) 并注册 hello 工具。
+#
+# 路径 B（显式插入行，用于需要精确控制插入位置的场景）：
+- insert:
+    - id: hello-tool
+      name: 'dsh-hello-tool'
