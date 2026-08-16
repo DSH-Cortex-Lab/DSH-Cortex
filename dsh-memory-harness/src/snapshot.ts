@@ -21,21 +21,31 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
-/** 快照消息的 source（D14：entries 为文件内容纯投影，不含容量表头/时间戳/路径）。 */
+/** 快照消息的 source（D14：entries/userEntries 为文件内容纯投影，不含容量表头/时间戳/路径）。 */
 export interface MemorySnapshotSource {
   readonly kind: 'memory-snapshot'
   readonly form: 'snapshot'
   /** 标记为 replacement（本会话内已发布过快照）。 */
   readonly update?: true
+  /** MEMORY 条目（§ 分隔）。 */
   readonly entries: readonly string[]
+  /** USER 条目（M1b：用户画像段；旧事件缺省为空）。 */
+  readonly userEntries?: readonly string[]
 }
 
 /** 快照渲染模板（D14/R3：固定表头 + 条目 + `§` 分隔，纯函数，无易变字段）。 */
-const HEADER = '── MEMORY (agent notes) ──'
+const MEMORY_HEADER = '── MEMORY (agent notes) ──'
+const USER_HEADER = '── USER PROFILE ──'
 
-/** 渲染快照文本（纯函数：只含条目文本 + 固定分隔，禁止时间戳/绝对路径/随机 ID）。 */
-export function renderMemorySnapshot(entries: readonly string[]): string {
-  return HEADER + '\n' + entries.join('\n§\n')
+/**
+ * 渲染快照文本（纯函数：只含条目文本 + 固定分隔，禁止时间戳/绝对路径/随机 ID）。
+ * M1b：USER 段在 MEMORY 段之前；空段整段省略（字节稳定）。
+ */
+export function renderMemorySnapshot(entries: readonly string[], userEntries: readonly string[] = []): string {
+  const sections: string[] = []
+  if (userEntries.length > 0) sections.push(USER_HEADER + '\n' + userEntries.join('\n§\n'))
+  sections.push(MEMORY_HEADER + '\n' + entries.join('\n§\n'))
+  return sections.join('\n\n')
 }
 
 /**
@@ -53,7 +63,8 @@ export function applySnapshot(ctx: Context, store: MemoryStore): void {
     if (decision.kind === 'reject') return decision
     signal.throwIfAborted()
     const entries = store.snapshot('memory').entries
-    const digest = digestEntries(entries)
+    const userEntries = store.snapshot('user').entries
+    const digest = digestSnapshot(entries, userEntries)
     const history = snapshotHistory(agent)
     const existing = snapshotMessage(decision.messages)
     if (history.visibleDigest === digest) {
@@ -61,13 +72,13 @@ export function applySnapshot(ctx: Context, store: MemoryStore): void {
         ? decision
         : { kind: 'enter', messages: decision.messages.filter(message => message.id !== existing.message.id) }
     }
-    if (existing !== undefined && digestEntries(existing.entries) === digest) return decision
-    if (!history.published && entries.length === 0) {
+    if (existing !== undefined && digestSnapshot(existing.entries, existing.userEntries ?? []) === digest) return decision
+    if (!history.published && entries.length === 0 && userEntries.length === 0) {
       return existing === undefined
         ? decision
         : { kind: 'enter', messages: decision.messages.filter(message => message.id !== existing.message.id) }
     }
-    const message = createSnapshotMessage(entries, history.published)
+    const message = createSnapshotMessage(entries, userEntries, history.published)
     return {
       kind: 'enter',
       messages: existing === undefined
@@ -77,21 +88,25 @@ export function applySnapshot(ctx: Context, store: MemoryStore): void {
   })
 }
 
-function createSnapshotMessage(entries: readonly string[], update: boolean): UserMessage {
+function createSnapshotMessage(entries: readonly string[], userEntries: readonly string[], update: boolean): UserMessage {
   return createUserMessage({
-    content: [{ type: 'text', text: renderMemorySnapshot(entries) }],
+    content: [{ type: 'text', text: renderMemorySnapshot(entries, userEntries) }],
     source: {
       kind: 'memory-snapshot',
       form: 'snapshot',
       ...(update ? { update: true } : {}),
       entries: [...entries],
+      userEntries: [...userEntries],
     },
   })
 }
 
-/** 条目身份摘要（对齐 tool-skill digest：逐条 JSON 化，避免分隔符歧义）。 */
-function digestEntries(entries: readonly string[]): string {
-  const canonical = entries.map(entry => JSON.stringify(entry)).join('\n')
+/** 快照身份摘要：MEMORY + USER 两份条目整体哈希（逐条 JSON 化，避免分隔符歧义）。 */
+function digestSnapshot(entries: readonly string[], userEntries: readonly string[]): string {
+  const canonical = JSON.stringify({
+    memory: entries.map(entry => JSON.stringify(entry)),
+    user: userEntries.map(entry => JSON.stringify(entry)),
+  })
   return createHash('sha256').update(canonical).digest('hex')
 }
 
@@ -101,6 +116,17 @@ function readSnapshotEntries(source: unknown): readonly string[] | undefined {
   const readable: string[] = []
   for (const entry of entries as readonly unknown[]) {
     if (typeof entry !== 'string') return undefined
+    readable.push(entry)
+  }
+  return readable
+}
+
+function readSnapshotUserEntries(source: unknown): readonly string[] {
+  const userEntries = (source as { userEntries?: unknown }).userEntries
+  if (!Array.isArray(userEntries)) return []
+  const readable: string[] = []
+  for (const entry of userEntries as readonly unknown[]) {
+    if (typeof entry !== 'string') return []
     readable.push(entry)
   }
   return readable
@@ -116,7 +142,8 @@ function snapshotHistory(agent: Agent): { visibleDigest?: string; published: boo
     if (event.type !== 'user/message' || event.data.source.kind !== 'memory-snapshot') continue
     const entries = readSnapshotEntries(event.data.source)
     if (entries === undefined) continue
-    const digest = digestEntries(entries)
+    const userEntries = readSnapshotUserEntries(event.data.source)
+    const digest = digestSnapshot(entries, userEntries)
     published = true
     if (visible.has(event.seq)) return { visibleDigest: digest, published }
   }
@@ -125,11 +152,12 @@ function snapshotHistory(agent: Agent): { visibleDigest?: string; published: boo
 
 function snapshotMessage(
   messages: readonly UserMessage[],
-): { message: UserMessage; entries: readonly string[] } | undefined {
+): { message: UserMessage; entries: readonly string[]; userEntries: readonly string[] } | undefined {
   for (const message of messages) {
     if (message.source.kind !== 'memory-snapshot') continue
     const entries = readSnapshotEntries(message.source)
-    if (entries !== undefined) return { message, entries }
+    if (entries === undefined) continue
+    return { message, entries, userEntries: readSnapshotUserEntries(message.source) }
   }
   return undefined
 }

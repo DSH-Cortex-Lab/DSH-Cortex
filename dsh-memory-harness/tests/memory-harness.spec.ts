@@ -111,6 +111,14 @@ function snapshotMessages(events: SessionEvent[]): Array<{ entries: string[]; up
   return result
 }
 
+/** 提取最近一条 memory-snapshot 消息的渲染文本。 */
+function snapshotText(agent: Agent): string {
+  return [...agent.session.events]
+    .filter(e => e.type === 'user/message' && e.data.source.kind === 'memory-snapshot')
+    .map(e => e.type === 'user/message' ? e.data.content.filter(b => b.type === 'text').map(b => b.text).join('') : '')
+    .join('')
+}
+
 describe('MemoryHarness ① 层验收', () => {
   describe('SOUL 懒重载（验收 7 · D13/D28）', () => {
     it('未变 mtime → 字节缓存；变了 → 重读新文本', async () => {
@@ -188,6 +196,30 @@ describe('MemoryHarness ① 层验收', () => {
         .map(e => e.type === 'user/message' ? e.data.content.filter(b => b.type === 'text').map(b => b.text).join('') : '')
         .join('')
       expect(text).toBe('── MEMORY (agent notes) ──\nentry-one')
+    })
+  })
+
+  describe('USER 画像注入（M1b）', () => {
+    it('USER.md 有内容时，首 step 快照含 USER PROFILE 段（在 MEMORY 段之前）', async () => {
+      const home = tmpHome()
+      seedMemory(home, 'entry-one')
+      writeFileSync(join(home, 'memories', 'USER.md'), '用户叫蓝天')
+      const { ctx, agent } = await harness(home, [textResponse('ack')])
+      followup(agent, 'hello')
+      await waitForIdle(ctx, agent)
+
+      const text = snapshotText(agent)
+      expect(text).toBe('── USER PROFILE ──\n用户叫蓝天\n\n── MEMORY (agent notes) ──\nentry-one')
+    })
+
+    it('USER.md 为空时省略 USER 段（字节稳定）', async () => {
+      const home = tmpHome()
+      seedMemory(home, 'entry-one')
+      const { ctx, agent } = await harness(home, [textResponse('ack')])
+      followup(agent, 'hello')
+      await waitForIdle(ctx, agent)
+
+      expect(snapshotText(agent)).toBe('── MEMORY (agent notes) ──\nentry-one')
     })
   })
 

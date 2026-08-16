@@ -1,8 +1,8 @@
 /**
  * MemoryStore：MEMORY/USER 持久化存储层。
  *
- * 纯 TS、无 dsh 依赖，可独立单测。P0 仅实现 `target='memory'`；`'user'` 槽位保留
- * （userFile/userLimit 已就位，M1b 协作者启用）。
+ * 纯 TS、无 dsh 依赖，可独立单测。`target='memory'` 与 `target='user'` 均已启用
+ * （M1b：USER 槽位开启，userFile/userLimit 生效）。
  *
  * 文件格式（对齐 Hermes MEMORY.md）：条目以独占一行的 `§` 分隔，多行条目保留内部换行。
  * usage = 条目内容字符数之和（不含分隔符）。
@@ -107,7 +107,7 @@ export class MemoryStore {
     }
   }
 
-  /** 读盘→解析→快照（P0 仅 MEMORY；USER 槽位预留）。 */
+  /** 读盘→解析→快照（MEMORY 与 USER 均启用）。 */
   snapshot(target: MemoryTarget = 'memory'): MemorySnapshot {
     const entries = this.isSupported(target) ? this.readEntries(target) : []
     return {
@@ -169,7 +169,7 @@ export class MemoryStore {
   }
 
   private isSupported(target: MemoryTarget): boolean {
-    return target === 'memory'
+    return target === 'memory' || target === 'user'
   }
 
   private deferred(target: MemoryTarget): WriteResult | undefined {
@@ -178,7 +178,7 @@ export class MemoryStore {
       success: false,
       usage: 0,
       limit: this.limitFor(target),
-      error: 'target "user" is deferred to M1b; P0 implements "memory" only',
+      error: `unsupported target ${JSON.stringify(target)}; supported: memory, user`,
     }
   }
 

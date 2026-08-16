@@ -1,6 +1,6 @@
 /**
  * MemoryStore 单测（vitest）。纯逻辑：读写 / § 解析 / 容量预算 / 原子写 / 去重 / 错误分支。
- * P0 覆盖 target='memory'；'user' 槽位验证 deferred 语义（M1b）。
+ * MEMORY 与 USER 两个 target 均已启用（M1b）。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
@@ -86,11 +86,13 @@ describe('MemoryStore', () => {
     expect(result.error).toContain('empty-content')
   })
 
-  it('defers target=user to M1b', () => {
+  it('supports target=user (M1b enabled)', () => {
     const s = store()
-    const result = s.add('user', 'x')
-    expect(result.success).toBe(false)
-    expect(result.error).toContain('deferred')
+    const result = s.add('user', '用户叫蓝天')
+    expect(result.success).toBe(true)
+    expect(s.snapshot('user').entries).toEqual(['用户叫蓝天'])
+    // 与 MEMORY 互不干扰
+    expect(s.snapshot('memory').entries).toEqual([])
   })
 
   it('round-trips multiline entries via parse/serialize', () => {

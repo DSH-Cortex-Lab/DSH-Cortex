@@ -109,11 +109,12 @@ check('rejects empty content', () => {
   })
 })
 
-check('defers target=user to M1b', () => {
+check('supports target=user (M1b enabled)', () => {
   withStore((s) => {
-    const result = s.add('user', 'x')
-    assert.equal(result.success, false)
-    assert.ok(result.error.includes('deferred'))
+    const result = s.add('user', '用户叫蓝天')
+    assert.equal(result.success, true)
+    assert.deepEqual(s.snapshot('user').entries, ['用户叫蓝天'])
+    assert.deepEqual(s.snapshot('memory').entries, [])
   })
 })
 
