@@ -253,25 +253,38 @@ export class ReviewEngine {
     checkpoint: ReviewCheckpoint | undefined,
   ): Promise<ReviewOutput> {
     try {
+      this.activity(`run started (session=${session.id})`)
       const catalog = await this.loadCatalog(agent)
+      this.activity(`run: catalog loaded (${catalog.length} skills)`)
       const catalogText = catalog.map(row => `${row.name}: ${row.description}`).join('\n')
       const llm = this.ctx.get('llm')
       if (llm === undefined) throw new Error('llm service unavailable for review')
       const prompt = buildReviewPrompt(renderDigest(digest), catalogText)
-      const text = await collectText(llm.stream({
-        provider: this.provider,
-        model: this.model,
-        system: prompt.system,
-        messages: [createUserMessage({
-          content: [{ type: 'text', text: prompt.user }],
-          source: { kind: 'plugin', plugin: 'dsh-skill-forge' },
-        })],
-      }))
+      this.activity('run: llm stream started')
+      // 双保险超时：signal 让适配器中断 + 竞速兜底（流挂起时 job 也能落败结算，不阻塞可见性）
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('review timed out after 180s')), 180_000)
+      })
+      const text = await Promise.race([
+        collectText(llm.stream({
+          provider: this.provider,
+          model: this.model,
+          system: prompt.system,
+          messages: [createUserMessage({
+            content: [{ type: 'text', text: prompt.user }],
+            source: { kind: 'plugin', plugin: 'dsh-skill-forge' },
+          })],
+          signal: AbortSignal.timeout(180_000),
+        })),
+        timeout,
+      ])
+      this.activity(`run: llm finished (${text.length} chars)`)
       const output = parseReviewOutput(text)
       if (output === undefined) {
-        throw new Error('review output was not parseable JSON')
+        throw new Error(`review output was not parseable JSON (got ${text.length} chars)`)
       }
       this.apply(output, catalog)
+      this.activity('run: output applied')
 
       // checkpoint 以本次 review 运行时的会话进度为准（job 运行与会话继续并发安全）
       const signals = countTurnSignals(session.events)
