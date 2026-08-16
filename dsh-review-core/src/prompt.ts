@@ -67,7 +67,44 @@ export function buildReviewPrompt(digestText: string, catalogText?: string): { s
   }
 }
 
-/** 解析 review 输出 JSON（容忍 ```json 围栏）。失败返回 undefined。 */
+/**
+ * fork 子 agent 模式的 review 指令（对齐 Hermes background_review 的 agentic 形式）：
+ * 子 agent 只带 memory/skill 工具，自主调用落盘；"Nothing to save" 是显式空操作。
+ * 与单发 JSON 形态（buildReviewPrompt）共用同一套信号分类学与反向过滤。
+ */
+export function buildForkReviewPrompt(): string {
+  return [
+    'You are the background review agent of an agent harness. You review a completed conversation excerpt and update the long-term stores using ONLY the tools available to you. You run unattended; the user is not present.',
+    'Your tools (only these exist for you, others will be refused):',
+    '  - memory_add / memory_replace / memory_remove — the agent long-term memory: durable environment facts, conventions, and lessons, written verbatim and short. USER profile facts use memory_add with target=user.',
+    '  - skill_create / skill_patch / skill_edit / skill_delete — the auto-save skill library.',
+    '  - skill — load and read an existing skill full content. Read the target before patching it.',
+    '=== SKILLS ===',
+    'Be ACTIVE: most sessions with real signal produce at least one skill update. A pass that does nothing when a signal fired is a missed learning opportunity, not a neutral outcome.',
+    'Signals that warrant a skill update (any ONE is enough):',
+    '  - The user corrected your style, tone, format, legibility, or verbosity. Frustration is a first-class signal: "stop doing X", "too verbose", "do not format like this", "you always do Y and I hate it".',
+    '  - The user corrected your workflow, approach, or sequence of steps. Encode the correction as a pitfall or an explicit step.',
+    '  - A non-trivial technique, fix, workaround, debugging path, or tool-usage pattern emerged that a future session would benefit from.',
+    '  - A skill that was loaded or consulted this session turned out wrong, missing a step, or outdated. Patch it now.',
+    'Preference order (pick the earliest that fits):',
+    '  1. PATCH AN EXISTING SKILL from the catalog when the learning belongs to the same class of task. Use the skill tool to read it first, then skill_patch it.',
+    '  2. CREATE A NEW CLASS-LEVEL SKILL only when no existing skill covers the class. The name MUST be class-level: NOT a PR number, error string, feature codename, library-alone name, or a "fix-X / debug-Y / audit-Z-today" session artifact.',
+    'Auto-save marking (MANDATORY): every skill you create or patch must carry the auto-save marker — end the skill NAME with "-auto-save" and end the DESCRIPTION with " (Auto-save)". This marks auto-generated skills for human review; never omit it.',
+    'Staged writes: your skill writes land in a staged area; a human reviews and promotes them. Do NOT attempt to promote or finalize anything — write the best version you can, the human decides.',
+    'Protected skills (DO NOT touch): bundled skills, hub-installed skills, external or user-owned skills — anything NOT marked source user-dsh in the catalog. If the only fitting skills are protected, do not patch them; create a new class-level auto-save skill instead, or say nothing.',
+    'Do NOT capture (these become persistent self-imposed constraints that bite later):',
+    '  - Environment-dependent failures: missing binaries, fresh-install errors, post-migration path mismatches, "command not found", unconfigured credentials, uninstalled packages.',
+    '  - Negative claims about tools or features ("X tool does not work", "cannot use Y"). They harden into refusals cited for months after the problem is fixed.',
+    '  - Session-specific transient errors that resolved before the conversation ended. If retrying worked, the lesson is the retry pattern, not the original failure.',
+    '  - One-off task narratives. "Summarize today\'s market" is not a class of work.',
+    '  - Unresolved failures: if the session ended WITHOUT finding a working method, never dress the dead ends up as a reliable workflow. Either say nothing, or capture only a real working alternative you are confident in — never the failed attempts.',
+    '=== MEMORY ===',
+    'memory_add: durable environment facts, conventions, lessons — verbatim, short, no transient state. memory_replace/memory_remove fix or drop outdated entries (locate by substring).',
+    '=== USER PROFILE ===',
+    'USER profile facts (memory_add with target=user): only facts stated BY the user, never inferred from behavior. Format: identity / preferences / goals / constraints.',
+    '"Nothing to save." is a real option but should NOT be the default. If the session ran smoothly with no corrections and produced no new technique, just say "Nothing to save." and stop. Otherwise, act with the tools.',
+  ].join('\n')
+}
 export function parseReviewOutput(text: string): ReviewOutput | undefined {
   const trimmed = text.trim()
   const stripped = trimmed.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '')

@@ -40,6 +40,7 @@ declare module '@deepseek-ai/dsh-jobs' {
 
 import {
   buildConversationDigest,
+  buildForkReviewPrompt,
   buildReviewPrompt,
   isDuplicate,
   parseReviewOutput,
@@ -144,8 +145,18 @@ function digestOf(entries: readonly DigestEntry[]): string {
   return createHash('sha256').update(canonical).digest('hex')
 }
 
+/** fork 子 agent run 句柄形状（避免硬依赖 dsh-subagent 类型）。 */
+interface ForkRun {
+  result: Promise<{ stopReason: string; output: unknown }>
+  localAgent?: { session: Session }
+  dispose: () => Promise<void>
+}
+
 /** 增量窗口上限：首次 review（无 checkpoint）的大历史会话不一次全量重放。 */
 const INCREMENTAL_CAP = 60
+
+/** fork 子 agent 的最大运行时长（超时中止并记为失败）。 */
+const FORK_TIMEOUT_MS = 180_000
 
 async function collectText(stream: AsyncIterable<StreamChunk>): Promise<{ text: string; finish: string }> {
   let text = ''
@@ -163,6 +174,9 @@ export class ReviewEngine {
 
   /** 进行中的 review job（job 去重：同一会话同一时刻只跑一个）。 */
   private readonly activeJobs = new Set<SessionId>()
+
+  /** review fork 子 agent 的会话（排除自身，防止"总结的总结"递归触发）。 */
+  private readonly excluded = new Set<SessionId>()
 
   constructor(
     private readonly ctx: Context,
@@ -192,7 +206,7 @@ export class ReviewEngine {
     this.ctx.on('agent/status', ({ agent, status }) => {
       if (status !== 'idle') return
       const session = agent.session
-      if (this.activeJobs.has(session.id)) return
+      if (this.activeJobs.has(session.id) || this.excluded.has(session.id)) return
       const checkpoint = this.checkpoints.get(session.id)
       const signals = countTurnSignals(session.events)
       const deltaUser = signals.userTurns - (checkpoint?.lastUserTurns ?? 0)
@@ -233,50 +247,23 @@ export class ReviewEngine {
   private schedule(agent: Agent | undefined, session: Session, digest: ConversationDigest, checkpoint: ReviewCheckpoint | undefined): void {
     this.activity(`scheduled (session=${session.id})`)
     void this.run(agent, session, digest, checkpoint).then(
-      output => this.activity(`completed (${summarize(output)}, session=${session.id})`),
+      detail => this.activity(`completed (${detail}, session=${session.id})`),
       error => this.activity(`failed (session=${session.id}): ${String(error)}`),
     )
   }
 
-  /** 一次 review：目录 → prompt → 模型 → 解析 → 应用（三路输出）→ checkpoint 落盘。 */
+  /** 一次 review（v2）：有 agent 时走 Hermes 式 fork 子 agent；无 agent（session-end）回退单发 JSON。 */
   private async run(
     agent: Agent | undefined,
     session: Session,
     digest: ConversationDigest,
     checkpoint: ReviewCheckpoint | undefined,
-  ): Promise<ReviewOutput> {
+  ): Promise<string> {
     try {
       this.activity(`run started (session=${session.id})`)
-      const catalog = await this.loadCatalog(agent)
-      this.activity(`run: catalog loaded (${catalog.length} skills)`)
-      const catalogText = catalog.map(row => `${row.name} [source:${row.source ?? 'unknown'}]: ${row.description}`).join('\n')
-      const llm = this.ctx.get('llm')
-      if (llm === undefined) throw new Error('llm service unavailable for review')
-      const prompt = buildReviewPrompt(renderDigest(digest), catalogText)
-      this.activity('run: llm stream started')
-      // 双保险超时：signal 让适配器中断 + 竞速兜底（流挂起时 job 也能落败结算，不阻塞可见性）
-      const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('review timed out after 180s')), 180_000)
-      })
-      const text = await Promise.race([
-        collectText(llm.stream({
-          provider: this.provider,
-          model: this.model,
-          system: prompt.system,
-          messages: [createUserMessage({
-            content: [{ type: 'text', text: prompt.user }],
-            source: { kind: 'plugin', plugin: 'dsh-skill-forge' },
-          })],
-          signal: AbortSignal.timeout(180_000),
-        })),
-        timeout,
-      ])
-      this.activity(`run: llm finished (${text.text.length} chars, finish=${text.finish})`)
-      const output = parseReviewOutput(text.text)
-      if (output === undefined) {
-        throw new Error(`review output was not parseable JSON (got ${text.text.length} chars)`)
-      }
-      this.apply(output, catalog)
+      const detail = agent !== undefined
+        ? await this.runFork(agent, session, digest)
+        : await this.runSingleShot(session, digest)
       this.activity('run: output applied')
 
       // checkpoint 以本次 review 运行时的会话进度为准（job 运行与会话继续并发安全）
@@ -290,11 +277,96 @@ export class ReviewEngine {
         lastDigest: checkpoint?.lastDigest === currentDigest ? checkpoint.lastDigest : currentDigest,
       })
       this.persistCheckpoints()
-      this.log('review completed: %s', summarize(output))
-      return output
+      this.log('review completed: %s', detail)
+      return detail
     } finally {
       this.activeJobs.delete(session.id)
     }
+  }
+
+  /**
+   * Hermes 式 fork：起一个带工具白名单（memory_* + skill_* + skill 读取）的子 agent，
+   * 影子人格 = review 指令，让它自己读库、自己落盘。写入直接经共享 store/forge。
+   */
+  private async runFork(agent: Agent, session: Session, digest: ConversationDigest): Promise<string> {
+    const subagents = this.ctx.get('subagents') as {
+      start: (name: string, request: unknown) => Promise<ForkRun>
+    } | undefined
+    if (subagents === undefined) throw new Error('subagents service unavailable for review fork')
+    const catalog = await this.loadCatalog(agent)
+    this.activity(`fork: catalog loaded (${catalog.length} skills)`)
+    const catalogText = catalog.map(row => `${row.name} [source:${row.source ?? 'unknown'}]: ${row.description}`).join('\n')
+    const userMessage = (catalogText.length > 0
+      ? '## Existing skill catalog (name [source]: description)\n' + catalogText + '\n\n'
+      : '') + '## 会话内容（增量优先）\n' + renderDigest(digest)
+    const baseAllow = ['memory_add', 'memory_replace', 'memory_remove', 'skill_create', 'skill_patch', 'skill_edit', 'skill_delete']
+    const request = (allow: string[]): unknown => ({
+      label: 'session review',
+      prompt: [{ type: 'text', text: userMessage }],
+      parent: agent,
+      signal: AbortSignal.timeout(FORK_TIMEOUT_MS),
+      toolFilter: { allow },
+      persona: buildForkReviewPrompt(),
+      agentOptions: { provider: this.provider, model: this.model },
+    })
+    this.activity('fork: spawn started')
+    let run: ForkRun
+    try {
+      run = await subagents.start('spawn', request([...baseAllow, 'skill']))
+    } catch (e) {
+      // 子 agent 的组合里若无 skill 读取工具，白名单校验会拒绝 → 降级为纯写工具重试
+      this.activity(`fork: spawn with skill loader failed (${String(e)}), retrying without it`)
+      run = await subagents.start('spawn', request(baseAllow))
+    }
+    const childSession = run.localAgent?.session
+    if (childSession !== undefined) this.excluded.add(childSession.id)
+    try {
+      const result = await run.result
+      this.activity(`fork finished (stopReason=${result.stopReason})`)
+      if (result.stopReason !== 'completed') {
+        throw new Error(`review fork ended with stopReason=${result.stopReason}`)
+      }
+    } finally {
+      if (childSession !== undefined) this.excluded.delete(childSession.id)
+      await run.dispose()
+    }
+    // 写入已由子 agent 经共享 store/forge 直接落盘（staged + 人控入库语义不变）
+    return 'fork'
+  }
+
+  /** session-end 无 agent 时的回退：单发 JSON（目录 → prompt → 模型 → 解析 → 应用）。 */
+  private async runSingleShot(session: Session, digest: ConversationDigest): Promise<string> {
+    const catalog = await this.loadCatalog(undefined)
+    this.activity(`run: catalog loaded (${catalog.length} skills)`)
+    const catalogText = catalog.map(row => `${row.name} [source:${row.source ?? 'unknown'}]: ${row.description}`).join('\n')
+    const llm = this.ctx.get('llm')
+    if (llm === undefined) throw new Error('llm service unavailable for review')
+    const prompt = buildReviewPrompt(renderDigest(digest), catalogText)
+    this.activity('run: llm stream started')
+    // 双保险超时：signal 让适配器中断 + 竞速兜底（流挂起时 job 也能落败结算，不阻塞可见性）
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('review timed out after 180s')), 180_000)
+    })
+    const text = await Promise.race([
+      collectText(llm.stream({
+        provider: this.provider,
+        model: this.model,
+        system: prompt.system,
+        messages: [createUserMessage({
+          content: [{ type: 'text', text: prompt.user }],
+          source: { kind: 'plugin', plugin: 'dsh-skill-forge' },
+        })],
+        signal: AbortSignal.timeout(180_000),
+      })),
+      timeout,
+    ])
+    this.activity(`run: llm finished (${text.text.length} chars, finish=${text.finish})`)
+    const output = parseReviewOutput(text.text)
+    if (output === undefined) {
+      throw new Error(`review output was not parseable JSON (got ${text.text.length} chars)`)
+    }
+    this.apply(output, catalog)
+    return summarize(output)
   }
 
   /** 现有技能目录（写入层去重用；缺 agent 或查询失败降级为空目录，仅失去去重不丢功能）。 */
