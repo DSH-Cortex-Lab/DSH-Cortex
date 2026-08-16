@@ -88,8 +88,8 @@ describe('review ① 层 mock spec', () => {
     }
     applyReviewOutput(output, forge as unknown as SkillForge, store, { reviewMinResultChars: 200, dedupeSimilarity: 0.8 })
     expect(forge.create).toHaveBeenCalledTimes(1)
-    // 自动生成技能统一加 (Auto-save) 后缀，便于人工整理区分
-    expect(forge.create).toHaveBeenCalledWith(expect.objectContaining({ name: 's', description: 'd (Auto-save)' }))
+    // 自动生成技能统一加 -auto-save 名字后缀 + (Auto-save) 描述后缀
+    expect(forge.create).toHaveBeenCalledWith(expect.objectContaining({ name: 's-auto-save', description: 'd (Auto-save)' }))
     expect(store.add).toHaveBeenCalledWith('memory', 'fact')
   })
 
