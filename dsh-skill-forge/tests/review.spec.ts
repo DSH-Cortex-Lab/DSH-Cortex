@@ -155,7 +155,7 @@ describe('review ① 层 mock spec', () => {
     applyReviewOutput(output, forge as unknown as SkillForge, undefined, {
       reviewMinResultChars: 200,
       dedupeSimilarity: 0.8,
-      catalog: [{ name: 'deploy-web', description: 'Deploy web apps to cloud servers with zero-downtime rollouts and health checks' }],
+      catalog: [{ name: 'deploy-web', description: 'Deploy web apps to cloud servers with zero-downtime rollouts' }],
     })
     expect(forge.create).not.toHaveBeenCalled()
     expect(forge.merge).not.toHaveBeenCalled()
