@@ -164,9 +164,10 @@ node dsh-skill-forge/tests/forge.runtime.mjs
 | 文档 | 内容 |
 |---|---|
 | [docs/架构说明.md](docs/架构说明.md) | 架构设计与关键机制 |
+| [docs/自动技能化机制设计.md](docs/自动技能化机制设计.md) | 自动总结（review）机制设计定稿：节律触发 / checkpoint / 写入层去重 / staged 人控入库 |
 | [docs/验收报告.md](docs/验收报告.md) | 四层验收记录 |
 | [docs/交付与交接.md](docs/交付与交接.md) | 交付物与交接说明 |
-| [docs/开发准则.md](docs/开发准则.md) | 开发准则（严禁 emoji） |
+| [docs/开发准则.md](docs/开发准则.md) | 开发准则（严禁 emoji + review 四项铁律） |
 | [dsh-memory-harness/README.md](dsh-memory-harness/README.md) | 记忆插件包档案 |
 | [dsh-skill-forge/README.md](dsh-skill-forge/README.md) | 技能插件包档案 |
 | [dsh-review-core/README.md](dsh-review-core/README.md) | 共享基建包档案 |

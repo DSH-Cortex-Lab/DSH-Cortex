@@ -163,9 +163,10 @@ Issues, feature requests, and design discussions: file at [GitHub Issues](https:
 | Document | Content |
 |---|---|
 | [docs/架构说明.md](docs/架构说明.md) | architecture and key mechanisms |
+| [docs/自动技能化机制设计.md](docs/自动技能化机制设计.md) | final auto-review design: cadence triggers / checkpoint / write-layer dedupe / staged human-in-the-loop |
 | [docs/验收报告.md](docs/验收报告.md) | four-layer acceptance records |
 | [docs/交付与交接.md](docs/交付与交接.md) | deliverables and handover notes |
-| [docs/开发准则.md](docs/开发准则.md) | development conventions (no emoji) |
+| [docs/开发准则.md](docs/开发准则.md) | development conventions (no emoji + review rules) |
 | [dsh-memory-harness/README.md](dsh-memory-harness/README.md) | memory plugin package record |
 | [dsh-skill-forge/README.md](dsh-skill-forge/README.md) | skill plugin package record |
 | [dsh-review-core/README.md](dsh-review-core/README.md) | shared foundation package record |
