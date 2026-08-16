@@ -30,6 +30,8 @@ export type CortexUiKey =
   | 'persona.none'
   | 'skill.intro'
   | 'skill.heading'
+  | 'skill.locateOpen'
+  | 'skill.locateFailed'
   | 'mcp.intro'
   | 'mcp.heading'
   | 'list.search'
@@ -75,6 +77,8 @@ export const zh: CortexUiDict = {
   'persona.none': '未提供',
   'skill.intro': '来自 ctx.skills 读端（filesystem provider 扫描 $DSH_HOME/skills、项目 .dsh/skills、~/.agents 与 bundled 技能，rank 100–600）。',
   'skill.heading': '技能目录',
+  'skill.locateOpen': '打开具体位置',
+  'skill.locateFailed': '无法解析技能本地位置',
   'mcp.intro': '来自 loader 装配的 mcp-client 插件实例（每个实例连接一个 MCP 服务器，工具以 mcp__<server>__<tool> 暴露）。',
   'mcp.heading': 'MCP 服务器',
   'list.search': '搜索',
@@ -119,6 +123,8 @@ export const en: CortexUiDict = {
   'persona.none': 'Not provided',
   'skill.intro': 'From the ctx.skills read side (the filesystem provider scans $DSH_HOME/skills, project .dsh/skills, ~/.agents, and bundled skills; ranks 100–600).',
   'skill.heading': 'Skill catalog',
+  'skill.locateOpen': 'Open file location',
+  'skill.locateFailed': 'Cannot resolve the local skill location',
   'mcp.intro': 'From the mcp-client plugin instances in the loader assembly (each instance connects to one MCP server; tools are exposed as mcp__<server>__<tool>).',
   'mcp.heading': 'MCP servers',
   'list.search': 'Search',

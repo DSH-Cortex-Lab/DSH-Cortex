@@ -9,9 +9,12 @@
  * 注册的 namespace 对根 settings 不可见）。client 端 fetch 下列路由：
  * - GET  /cortex/api/status → { soul, soulPath, core, skills, mcp, updatedAt }
  * - POST /cortex/api/soul   → { soul } 写 SOUL.md（原子写，memory 插件懒重载生效）
+ * - POST /cortex/api/skill/locate → { name, open } 解析技能本地路径（skills.get），
+ *   open=true 时在系统文件管理器定位（explorer /select）
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { appendFileSync, mkdirSync, readFileSync, existsSync, writeFileSync, renameSync } from 'node:fs'
+import { spawn } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 // skills/change 事件声明合并（ctx.on）
@@ -55,6 +58,64 @@ function atomicWrite(file: string, text: string): void {
     renameSync(tmp, file)
   } catch {
     writeFileSync(file, text, 'utf8')
+  }
+}
+
+/** skills.get() 返回的 definition 里带 path（SKILL.md 绝对路径）与 resourceBase（技能目录）。 */
+interface SkillDefinitionLike {
+  path?: string
+  resourceBase?: { kind?: string; path?: string; url?: string }
+}
+
+/**
+ * 按技能名解析本地文件位置：遍历 live agents，用各 agent 的 scope+cwd 调
+ * skills.get()（filesystem provider 在 preset 层，不带 scope 查不到）。
+ * 优先 SKILL.md 绝对路径（path），退回技能目录（resourceBase.directory）。
+ */
+async function resolveSkillPath(ctx: Context, name: string, log: (m: string) => void): Promise<string | undefined> {
+  const registry = (ctx as unknown as {
+    skills?: { get: (n: string, o?: unknown) => Promise<SkillDefinitionLike | undefined> }
+  }).skills
+  if (!registry || typeof registry.get !== 'function') {
+    log('skills.get 不可用，无法解析技能位置')
+    return undefined
+  }
+  const agentsSvc = (ctx as unknown as {
+    agents?: { list: () => Array<{ session?: { header?: { cwd?: string } } }> }
+  }).agents
+  const liveAgents = agentsSvc?.list?.() ?? []
+  for (const agent of liveAgents) {
+    try {
+      const def = await registry.get(name, {
+        scope: (agent as unknown) ?? undefined,
+        cwd: agent?.session?.header?.cwd ?? process.cwd(),
+      })
+      if (!def) continue
+      const dir = def.resourceBase?.kind === 'directory' ? def.resourceBase.path : undefined
+      const p = def.path ?? dir
+      if (p !== undefined && p.length > 0) return p
+    } catch (e) {
+      log('skills.get(' + name + ') error: ' + String(e))
+    }
+  }
+  return undefined
+}
+
+/** 在系统文件管理器里定位文件（win32: explorer /select；darwin: open -R；linux: xdg-open 目录）。 */
+function revealInExplorer(target: string): boolean {
+  try {
+    let child
+    if (process.platform === 'win32') {
+      child = spawn('explorer.exe', ['/select,', target], { stdio: 'ignore', detached: true })
+    } else if (process.platform === 'darwin') {
+      child = spawn('open', ['-R', target], { stdio: 'ignore', detached: true })
+    } else {
+      child = spawn('xdg-open', [dirname(target)], { stdio: 'ignore', detached: true })
+    }
+    child.unref()
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -234,5 +295,39 @@ async function initHostBridge(ctx: Context, soulPath: string, log: (m: string) =
     },
   }), 'dsh-cortex-ui: soul route')
 
-  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul）')
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/skill/locate',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        void (async () => {
+          try {
+            const body = JSON.parse(data) as { name?: unknown; open?: unknown }
+            const name = String(body.name ?? '').trim()
+            const row = name.length > 0 ? state.skills.find((s) => s.name === name) : undefined
+            if (row === undefined) {
+              json(res, 404, { ok: false, error: 'skill not found' })
+              return
+            }
+            // 路径只在 host 侧按注册表解析，客户端只能传技能名
+            const path = await resolveSkillPath(ctx, name, log)
+            if (path === undefined) {
+              json(res, 404, { ok: false, error: 'no local file location' })
+              return
+            }
+            const opened = body.open === true ? revealInExplorer(path) : false
+            log('skill locate: ' + name + ' -> ' + path + (opened ? ' (opened)' : ''))
+            json(res, 200, { ok: true, path, opened })
+          } catch (e) {
+            json(res, 400, { ok: false, error: String(e) })
+          }
+        })()
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: skill locate route')
+
+  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/skill/locate）')
 }

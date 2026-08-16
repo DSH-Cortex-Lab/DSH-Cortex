@@ -2,8 +2,8 @@
  * @dsh-cortex/dsh-cortex-ui — 浏览器端：侧栏"设置上方"入口 + 全屏 overlay 管理面板。
  *
  * 五 tab：人格 / 记忆 / 用户画像 / 技能 / MCP。
- * 数据通道：GET /cortex/api/status + POST /cortex/api/soul（webServer 路由，
- * preset 层实例注册）；轮询 5s 刷新。
+ * 数据通道：GET /cortex/api/status + POST /cortex/api/soul +
+ * POST /cortex/api/skill/locate（webServer 路由，preset 层实例注册）；轮询 5s 刷新。
  *
  * 入口：sidebar.footer.action（官方注释：Footer actions stack above Settings）
  * 样式对齐 ui-settings 的 trigger 行：14px、圆角 12、悬停
@@ -14,7 +14,8 @@
 import { createElement, Fragment, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type * as React from 'react'
 import {
-  IconChevronDownOutline14, IconCloseOutline16, IconCordisPluginOutline14, IconSearchOutline16,
+  IconChevronDownOutline14, IconCloseOutline16, IconCordisPluginOutline14,
+  IconFolderOpenOutline16, IconSearchOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 // ctx.locale 的 Context 合并（dsh-client-locale 提供该服务）
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -320,6 +321,55 @@ const rowDetailCode: React.CSSProperties = {
   color: 'var(--dsw-alias-label-dimmed)', overflowWrap: 'anywhere',
 }
 const statusText: React.CSSProperties = { margin: '0 0 14px', fontSize: 13, color: 'var(--dsw-alias-label-tertiary)' }
+// ── 技能定位（展开区内：位置 + 打开具体位置）──
+const locateRow: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, marginTop: 4,
+}
+const locateBtn: React.CSSProperties = {
+  flexShrink: 0, appearance: 'none', border: '1px solid var(--dsw-alias-border-l2)',
+  background: 'var(--dsw-alias-bg-layer-1)', color: 'var(--dsw-alias-label-primary)',
+  font: 'inherit', fontSize: 12, lineHeight: '18px', borderRadius: 8,
+  padding: '3px 10px', cursor: 'pointer',
+}
+
+/**
+ * 技能位置解析：mount 时先 open:false 解析路径用于展示；
+ * 「打开具体位置」→ open:true，host 解析 + 文件管理器定位。
+ */
+function SkillLocate({ name }: { name: string }): React.ReactElement {
+  const [loc, setLoc] = useState<{ phase: 'loading' | 'done' | 'error'; path: string; message: string }>(
+    { phase: 'loading', path: '', message: '' })
+  const call = (open: boolean): void => {
+    setLoc((s) => ({ ...s, phase: 'loading' }))
+    fetch('/cortex/api/skill/locate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, open }),
+    }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        const data = d as { ok?: boolean; path?: string; error?: string }
+        if (!ok || data.path === undefined || data.path === '') {
+          setLoc({ phase: 'error', path: '', message: data.error ?? t('skill.locateFailed') })
+        } else {
+          setLoc({ phase: 'done', path: data.path, message: '' })
+        }
+      })
+      .catch((e) => setLoc({ phase: 'error', path: '', message: String(e) }))
+  }
+  useEffect(() => { call(false) /* 展开即解析位置 */ }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  return createElement('div', { style: locateRow },
+    createElement(IconFolderOpenOutline16, { size: 14 }),
+    createElement('code', { style: { ...rowDetailCode, flex: 1 } },
+      loc.phase === 'loading' ? t('list.loading')
+        : loc.phase === 'error' ? loc.message
+          : loc.path),
+    createElement('button', {
+      type: 'button',
+      style: { ...locateBtn, opacity: loc.phase === 'loading' ? 0.5 : 1 },
+      disabled: loc.phase === 'loading',
+      onClick: () => call(true),
+    }, t('skill.locateOpen')))
+}
 
 /** 通用可搜索清单（复刻插件清单页） */
 function SearchableList({ heading, rows, matches, renderTitle, renderTags, renderDetails }: {
@@ -392,7 +442,8 @@ function SkillTab({ status }: { status: CortexStatus | null }): React.ReactEleme
       renderDetails: (row) => createElement('div', null,
         createElement('p', { style: rowDetailText }, row.description || t('list.noDescription')),
         row.whenToUse ? createElement('p', { style: rowDetailText }, row.whenToUse) : null,
-        createElement('code', { style: rowDetailCode }, t('list.providerSource') + ' ' + row.provider + ' · source: ' + row.source)),
+        createElement('code', { style: rowDetailCode }, t('list.providerSource') + ' ' + row.provider + ' · source: ' + row.source),
+        createElement(SkillLocate, { name: row.name })),
     }))
 }
 
