@@ -293,6 +293,57 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' })
     res.end(JSON.stringify(body))
   }
+
+  // ── 诊断：loader 装配行清单 + 关键服务可见性（排查 preset 层装配问题）──
+  const probeService = (name: string): string => {
+    try {
+      const s = ctx.get(name)
+      return s === undefined ? 'undefined' : 'object:' + typeof s
+    } catch (e) {
+      return 'throw:' + String(e)
+    }
+  }
+  const loaderDiag = ctx.get('loader') as {
+    entries: () => Iterable<{ options?: { name?: unknown; id?: unknown; disabled?: unknown }; fiber?: unknown }>
+  } | undefined
+  const loaderRows: unknown[] = []
+  if (loaderDiag && typeof loaderDiag.entries === 'function') {
+    for (const entry of loaderDiag.entries()) {
+      const opts = (entry.options ?? {}) as { name?: unknown; id?: unknown; disabled?: unknown }
+      loaderRows.push({
+        id: String(opts.id ?? ''),
+        name: String(opts.name ?? ''),
+        fiber: entry.fiber !== undefined,
+        disabled: opts.disabled === true,
+      })
+    }
+  }
+  const debugBody = (): {
+    ok: boolean
+    services: Record<string, string>
+    loaderRows: unknown[]
+    state: Record<string, string>
+  } => ({
+    ok: true,
+    services: {
+      tools: probeService('tools'),
+      systemPrompt: probeService('systemPrompt'),
+      skills: probeService('skills'),
+      agents: probeService('agents'),
+      webServer: probeService('webServer'),
+      loader: probeService('loader'),
+    },
+    loaderRows,
+    state: {
+      soulPath: state.soulPath,
+      userPath: state.userPath,
+      memoryPath: state.memoryPath,
+      corePath: state.corePath,
+    },
+  })
+  log('diagnostic: services=' + JSON.stringify(debugBody().services) + ' loaderRows=' + JSON.stringify(loaderRows))
+  log('diagnostic paths: soul=' + state.soulPath + ' user=' + state.userPath + ' memory=' + state.memoryPath + ' core=' + state.corePath)
+
   const statusBody = (): unknown => ({
     ok: true,
     soul: state.soul,
@@ -307,6 +358,12 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     mcp: state.mcp,
     updatedAt: state.updatedAt,
   })
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/debug',
+    handler: (_req, res) => json(res, 200, debugBody()),
+  }), 'dsh-cortex-ui: debug route')
 
   ctx.effect(() => webServer.register({
     kind: 'exact',
