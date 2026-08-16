@@ -1,10 +1,14 @@
 # DSH-Cortex
 
+中文 | [English](README.en.md)
+
 > DeepSeek Harness（`dsh`）的「长期记忆 + 自动技能化 + 管理面板」插件集。
 > 纯 Cordis 插件叠加、通过 profile 装配，**不修改 dsh 核心**。
 
 [![GitHub stars](https://img.shields.io/github/stars/DSH-Cortex-Lab/DSH-Cortex)](https://github.com/DSH-Cortex-Lab/DSH-Cortex)
 [![license](https://img.shields.io/github/license/DSH-Cortex-Lab/DSH-Cortex)](LICENSE)
+
+> [最新 Release](https://github.com/DSH-Cortex-Lab/DSH-Cortex/releases/latest) · [dsh-plugin 生态](https://github.com/topics/dsh-plugin) · [反馈](https://github.com/DSH-Cortex-Lab/DSH-Cortex/issues)
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 是 DeepSeek AI 开源的 agent harness（Cordis 插件框架，"everything is a plugin"）。DSH-Cortex 补齐 dsh 缺失的两个能力——跨会话长期记忆与经验自动沉淀，并提供统一的管理面板。
 
