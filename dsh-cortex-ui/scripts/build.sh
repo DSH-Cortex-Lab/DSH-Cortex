@@ -24,7 +24,12 @@ if [ ! -x "$TSC" ] && [ ! -f "$TSC.cmd" ]; then
 fi
 
 link_pkg() {
-  local target="$CHECKOUT/$2"
+  local target="$2"
+  case "$target" in
+    /*) ;;
+    [A-Za-z]:/*) ;;
+    *) target="$CHECKOUT/$2" ;;
+  esac
   if [ ! -e "$target" ]; then
     echo "build: dependency target missing: $target" >&2
     exit 1
@@ -47,6 +52,12 @@ link_pkg cosmokit vendor/cosmokit
 link_pkg schemastery vendor/schemastery
 link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives
 link_pkg @deepseek-ai/dsh-client-ui-slots packages/client/ui-slots
+link_pkg @deepseek-ai/dsh-client-runtime packages/client/runtime
+link_pkg @deepseek-ai/dsh-client-ui-settings packages/client/ui-settings
+link_pkg @deepseek-ai/dsh-api-remotes packages/api/remotes
+link_pkg @deepseek-ai/dsh-settings packages/settings/settings
+# 兄弟包：host 端 import CORE_PERSONALITY_TEXT（绝对路径，跨 checkout）
+link_pkg @dsh-cortex/dsh-memory-harness "D:/Deploy/deepseekherness/Project/CORE2/DSH-Cortex/dsh-memory-harness"
 # @types/node（编译类型；checkout 自带）
 link_pkg @types/node node_modules/@types/node
 
