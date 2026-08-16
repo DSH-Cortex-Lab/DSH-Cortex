@@ -53,6 +53,7 @@ link_pkg schemastery vendor/schemastery
 link_pkg @deepseek-ai/dsh-client-ui-primitives packages/client/ui-primitives
 link_pkg @deepseek-ai/dsh-client-ui-slots packages/client/ui-slots
 link_pkg @deepseek-ai/dsh-client-runtime packages/client/runtime
+link_pkg @deepseek-ai/dsh-client-locale packages/client/locale
 link_pkg @deepseek-ai/dsh-client-ui-settings packages/client/ui-settings
 link_pkg @deepseek-ai/dsh-api-remotes packages/api/remotes
 link_pkg @deepseek-ai/dsh-settings packages/settings/settings

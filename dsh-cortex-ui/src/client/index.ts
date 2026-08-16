@@ -11,25 +11,49 @@
  * 面板：全屏 fixed overlay，Esc / 关闭按钮退出。
  * 构建：npm run build:client（tsdown → lib/client.js）。
  */
-import { createElement, Fragment, useEffect, useMemo, useState } from 'react'
+import { createElement, Fragment, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type * as React from 'react'
 import {
   IconChevronDownOutline14, IconCloseOutline16, IconCordisPluginOutline14, IconSearchOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+// ctx.locale 的 Context 合并（dsh-client-locale 提供该服务）
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+import { en, zh, type CortexUiKey } from './locales.js'
 
 type ClientContext = {
   [key: string]: any
 }
 
-export const inject = ['slots']
+/** 文案翻译函数（locale.bind 的稳定引用） */
+type TFunc = (key: CortexUiKey) => string
+/** locale 服务面（subscribe/getSnapshot 供 useSyncExternalStore） */
+type LocaleFace = {
+  subscribe: (fn: () => void) => () => void
+  getSnapshot: () => { revision: number }
+}
 
-/** 五个 tab（后续逐块补功能；无 emoji） */
+export const inject = ['slots', 'locale']
+
+// 模块级单例：apply 时 bind 后写入；组件直接调用 t('key')。
+// locale 切换由 revision 订阅触发重渲染（CortexPanel 内的 useLocaleRevision）。
+let currentT: TFunc = ((key) => key) as TFunc
+let localeFace: LocaleFace | null = null
+const NOOP_FACE: LocaleFace = { subscribe: () => () => {}, getSnapshot: () => ({ revision: 0 }) }
+const t: TFunc = (key) => currentT(key)
+
+/** locale 切换时强制重渲染（revision 变化触发） */
+function useLocaleRevision(): number {
+  const face = localeFace ?? NOOP_FACE
+  return useSyncExternalStore(face.subscribe, face.getSnapshot).revision
+}
+
+/** 五个 tab */
 const TABS = [
-  { id: 'persona', label: '人格' },
-  { id: 'memory', label: '记忆' },
-  { id: 'user', label: '用户画像' },
-  { id: 'skill', label: 'skill' },
-  { id: 'mcp', label: 'MCP' },
+  { id: 'persona', key: 'tab.persona' },
+  { id: 'memory', key: 'tab.memory' },
+  { id: 'user', key: 'tab.user' },
+  { id: 'skill', key: 'tab.skill' },
+  { id: 'mcp', key: 'tab.mcp' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -203,44 +227,44 @@ function PersonaTab({ status }: { status: CortexStatus | null }): React.ReactEle
   const soulPath = status?.soulPath ?? ''
   const soulChars = status?.soul?.length ?? 0
   return createElement('div', { style: section },
-    createElement('h2', { style: title }, '人格'),
+    createElement('h2', { style: title }, t('persona.title')),
     createElement('p', { style: intro },
-      '人格分两层：SOUL 是档案级人格；core:personality 是机器级公共底线人格。编辑与保存功能后续接入，当前为排版预览。'),
+      t('persona.intro')),
     createElement('section', { style: group },
-      createElement('h3', { style: groupHead }, '档案人格'),
+      createElement('h3', { style: groupHead }, t('persona.groupArchive')),
       createElement('ul', { style: cards },
         createElement('li', { style: card },
           createElement('div', { style: cardMain },
             createElement('span', { style: cardHead },
-              createElement('span', { style: cardName }, 'SOUL'),
-              createElement('span', { style: badge }, '档案级'),
-              createElement('span', { style: inUse }, status ? '懒重载生效中' : '加载中…'),
+              createElement('span', { style: cardName }, t('persona.soulName')),
+              createElement('span', { style: badge }, t('persona.soulBadge')),
+              createElement('span', { style: inUse }, status ? t('persona.soulStatus') : t('list.loading')),
             ),
             createElement('span', { style: cardDesc },
-              '定义「我是谁、我怎么说」——身份、行为准则、沟通风格。每次会话按 SOUL.md 懒重载，改文件即时生效。'),
-            createElement('code', { style: cardId }, soulPath || '（未连接 host 桥）'),
+              t('persona.soulDesc')),
+            createElement('code', { style: cardId }, soulPath || t('persona.noBridge')),
           ),
           createElement('div', { style: cardFoot },
-            createElement('span', { style: { ...badge, border: 'none' } }, soulChars + ' 字符'),
+            createElement('span', { style: { ...badge, border: 'none' } }, soulChars + ' ' + t('persona.chars')),
           ),
         ),
       ),
     ),
     createElement('section', { style: groupExtra },
-      createElement('h3', { style: groupHead }, '公共底线人格'),
+      createElement('h3', { style: groupHead }, t('persona.groupBaseline')),
       createElement('ul', { style: cards },
         createElement('li', { style: card },
           createElement('div', { style: cardMain },
             createElement('span', { style: cardHead },
-              createElement('span', { style: cardName }, 'core:personality'),
-              createElement('span', { style: badge }, '机器级 · 只读'),
+              createElement('span', { style: cardName }, t('persona.coreName')),
+              createElement('span', { style: badge }, t('persona.coreBadge')),
             ),
             createElement('span', { style: cardDesc },
-              '机器级静态人格，所有档案与 agent 共享（order -90），单一来源，不可在此编辑。'),
-            createElement('code', { style: cardId }, 'order -90 · 全局静态 · 来源：dsh-memory-harness'),
+              t('persona.coreDesc')),
+            createElement('code', { style: cardId }, t('persona.coreId')),
           ),
           createElement('div', { style: cardFoot },
-            createElement('span', { style: { ...badge, border: 'none' } }, status?.core ? '已加载' : '未提供'),
+            createElement('span', { style: { ...badge, border: 'none' } }, status?.core ? t('persona.loaded') : t('persona.none')),
           ),
         ),
       ),
@@ -317,17 +341,17 @@ function SearchableList({ heading, rows, matches, renderTitle, renderTags, rende
         type: 'search',
         style: searchInput,
         value: query,
-        placeholder: '搜索',
-        'aria-label': '搜索',
+        placeholder: t('list.search'),
+        'aria-label': t('list.search'),
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value),
       })),
     createElement('div', { style: catalogHeading },
       createElement('h3', { style: catalogTitle }, heading),
       createElement('span', { style: catalogCount }, String(filtered.length))),
     rows.length === 0
-      ? createElement('p', { style: statusText }, '暂无条目')
+      ? createElement('p', { style: statusText }, t('list.empty'))
       : filtered.length === 0
-        ? createElement('p', { style: statusText }, '无匹配结果')
+        ? createElement('p', { style: statusText }, t('list.noMatch'))
         : createElement('ul', { style: listCards },
           filtered.map((row) => {
             const open = expanded === row.key
@@ -352,9 +376,9 @@ function SkillTab({ status }: { status: CortexStatus | null }): React.ReactEleme
   const rows = (status?.skills ?? []).map((s) => ({ key: s.name, ...s }))
   return createElement('div', null,
     createElement('p', { style: statusText },
-      '来自 ctx.skills 读端（filesystem provider 扫描 $DSH_HOME/skills、项目 .dsh/skills、~/.agents 与 bundled 技能，rank 100–600）。'),
+      t('skill.intro')),
     createElement(SearchableList, {
-      heading: '技能目录',
+      heading: t('skill.heading'),
       rows,
       matches: (row, q) => row.name.toLocaleLowerCase().includes(q)
         || row.description.toLocaleLowerCase().includes(q)
@@ -362,13 +386,13 @@ function SkillTab({ status }: { status: CortexStatus | null }): React.ReactEleme
       renderTitle: (row) => row.name,
       renderTags: (row) => [
         createElement('span', { key: 'src', style: rowTag(true) }, String(row.source)),
-        row.modelInvocable ? createElement('span', { key: 'm', style: rowTag(true) }, '模型可调用') : null,
-        row.userInvocable ? createElement('span', { key: 'u', style: rowTag(true) }, '用户可调用') : null,
+        row.modelInvocable ? createElement('span', { key: 'm', style: rowTag(true) }, t('list.modelCallable')) : null,
+        row.userInvocable ? createElement('span', { key: 'u', style: rowTag(true) }, t('list.userCallable')) : null,
       ],
       renderDetails: (row) => createElement('div', null,
-        createElement('p', { style: rowDetailText }, row.description || '（无描述）'),
+        createElement('p', { style: rowDetailText }, row.description || t('list.noDescription')),
         row.whenToUse ? createElement('p', { style: rowDetailText }, row.whenToUse) : null,
-        createElement('code', { style: rowDetailCode }, 'provider: ' + row.provider + ' · source: ' + row.source)),
+        createElement('code', { style: rowDetailCode }, t('list.providerSource') + ' ' + row.provider + ' · source: ' + row.source)),
     }))
 }
 
@@ -377,19 +401,19 @@ function McpTab({ status }: { status: CortexStatus | null }): React.ReactElement
   const rows = (status?.mcp ?? []).map((m) => ({ key: m.serverName, ...m }))
   return createElement('div', null,
     createElement('p', { style: statusText },
-      '来自 loader 装配的 mcp-client 插件实例（每个实例连接一个 MCP 服务器，工具以 mcp__<server>__<tool> 暴露）。'),
+      t('mcp.intro')),
     createElement(SearchableList, {
-      heading: 'MCP 服务器',
+      heading: t('mcp.heading'),
       rows,
       matches: (row, q) => row.serverName.toLocaleLowerCase().includes(q)
         || row.endpoint.toLocaleLowerCase().includes(q),
       renderTitle: (row) => row.serverName || '（未命名）',
       renderTags: (row) => [
         createElement('span', { key: 't', style: rowTag(true) }, String(row.transport)),
-        createElement('span', { key: 'e', style: rowTag(row.enabled) }, row.enabled ? '已启用' : '未启用'),
+        createElement('span', { key: 'e', style: rowTag(row.enabled) }, row.enabled ? t('list.enabled') : t('list.disabled')),
       ],
       renderDetails: (row) => createElement('div', null,
-        createElement('code', { style: rowDetailCode }, row.endpoint || '（无端点信息）')),
+        createElement('code', { style: rowDetailCode }, row.endpoint || t('list.noEndpoint'))),
     }))
 }
 
@@ -397,9 +421,9 @@ function McpTab({ status }: { status: CortexStatus | null }): React.ReactElement
 function TabPlaceholder({ tab }: { tab: TabId }): React.ReactElement {
   const meta = TABS.find((t) => t.id === tab)!
   return createElement('div', null,
-    createElement('h2', { style: { margin: '0 0 6px', fontSize: 18 } }, meta.label),
+    createElement('h2', { style: { margin: '0 0 6px', fontSize: 18 } }, t(meta.key)),
     createElement('p', { style: { color: 'var(--dsw-alias-label-secondary, #888)', fontSize: 13, margin: 0 } },
-      '功能开发中——后续在此接入' + meta.label + '管理能力。'),
+      t('placeholder.dev') + t(meta.key) + '管理能力。'),
   )
 }
 
@@ -408,6 +432,7 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
   const [tab, setTab] = useState<TabId>('persona')
   const [closeHover, setCloseHover] = useState(false)
   const { status, error } = useCortexStatus()
+  useLocaleRevision() // locale 切换 → 重渲染 → t() 取新文案
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') onClose() }
@@ -419,20 +444,20 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
     createElement('div', { style: mask }),
     createElement('div', { style: panel, role: 'dialog', 'aria-modal': true, onClick: (e: React.MouseEvent) => e.stopPropagation() },
       createElement('div', { style: nav },
-        createElement('div', { style: navTitle }, 'DSH-Cortex'),
-        ...TABS.map((t) =>
+        createElement('div', { style: navTitle }, t('navTitle')),
+        ...TABS.map((tabDef) =>
           createElement('button', {
-            key: t.id,
-            style: navCell(tab === t.id),
-            onClick: () => setTab(t.id),
-          }, t.label)),
+            key: tabDef.id,
+            style: navCell(tab === tabDef.id),
+            onClick: () => setTab(tabDef.id),
+          }, t(tabDef.key))),
       ),
       createElement('div', { style: content },
         createElement('div', { style: header },
           createElement('div', { style: { display: 'flex' } }),
           createElement('button', {
             type: 'button',
-            'aria-label': '关闭',
+            'aria-label': t('close'),
             style: { ...closeBtn, background: closeHover ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent' },
             onMouseEnter: () => setCloseHover(true),
             onMouseLeave: () => setCloseHover(false),
@@ -441,7 +466,7 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
         ),
         createElement('div', { style: options },
           error !== ''
-            ? createElement('p', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 13 } }, '数据通道错误：' + error)
+            ? createElement('p', { style: { color: 'var(--dsw-alias-state-error-primary)', fontSize: 13 } }, t('channelError') + error)
             : tab === 'persona'
               ? createElement(PersonaTab, { status })
               : tab === 'skill'
@@ -471,18 +496,21 @@ function CortexEntry({ wide }: { wide: boolean }): React.ReactElement {
       onClick: () => setOpen(true),
     },
       createElement(IconCordisPluginOutline14, { size: wide ? 16 : 18 }),
-      wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, '插件管理') : null),
+      wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, t('entryLabel')) : null),
     open ? createElement(CortexPanel, { onClose: () => setOpen(false) }) : null,
   )
 }
 
 export function apply(ctx: ClientContext): void {
+  ctx.effect(() => ctx.locale.register('cortex-ui', { zh, en }), 'dsh-cortex-ui: dictionaries')
+  currentT = ctx.locale.bind('cortex-ui') as TFunc
+  localeFace = ctx.locale as unknown as LocaleFace
   ctx.effect(() => ctx.slots.inject('sidebar.footer.action', () =>
     ctx.slots.register({
       name: 'sidebar.footer.action',
       id: 'cortex-manager',
       order: 0,
-      label: () => '插件管理',
+      label: () => t('entryLabel'),
     }, CortexEntry),
   ), 'dsh-cortex-ui: sidebar entry')
 }
