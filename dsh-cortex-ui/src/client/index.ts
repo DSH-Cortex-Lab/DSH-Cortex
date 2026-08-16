@@ -81,10 +81,6 @@ interface StagedSkillRow {
   description: string
   createdAt: number
 }
-interface ReviewActivityRow {
-  time: string
-  text: string
-}
 interface CortexStatus {
   ok: boolean
   soul: string
@@ -98,7 +94,6 @@ interface CortexStatus {
   core: string
   corePath: string
   staged: StagedSkillRow[]
-  recentReviews: ReviewActivityRow[]
   skills: SkillRow[]
   mcp: McpRow[]
   updatedAt: number
@@ -668,22 +663,12 @@ function StagedSection({ rows, refresh }: { rows: StagedSkillRow[]; refresh: () 
   )
 }
 
-/** 技能 tab：自动总结记录 + 待入库分区 + ctx.skills 快照清单 */
+/** 技能 tab：待入库分区 + ctx.skills 快照清单（review 活动记录为调试信息，不展示给用户） */
 function SkillTab({ status, refresh }: { status: CortexStatus | null; refresh: () => void }): React.ReactElement {
   const rows = (status?.skills ?? []).map((s) => ({ key: s.name, ...s }))
-  const reviews = status?.recentReviews ?? []
   return createElement('div', null,
     createElement('p', { style: statusText },
       t('skill.intro')),
-    createElement('div', { style: catalogHeading },
-      createElement('h3', { style: catalogTitle }, t('review.recent')),
-      createElement('span', { style: catalogCount }, String(reviews.length))),
-    reviews.length === 0
-      ? createElement('p', { style: statusText }, t('review.none'))
-      : createElement('ul', { style: { listStyle: 'none', margin: '0 0 14px', padding: 0, display: 'flex', flexDirection: 'column', gap: 4 } },
-        reviews.map((r) => createElement('li', { key: r.time + r.text, style: { display: 'flex', gap: 8, fontSize: 12, color: 'var(--dsw-alias-label-secondary)' } },
-          createElement('code', { style: { ...rowDetailCode, flexShrink: 0 } }, r.time.replace('T', ' ').slice(0, 19)),
-          createElement('span', { style: { overflowWrap: 'anywhere' } }, r.text)))),
     createElement(StagedSection, { rows: status?.staged ?? [], refresh }),
     createElement(SearchableList, {
       heading: t('skill.heading'),

@@ -132,19 +132,6 @@ function revealInExplorer(target: string): boolean {
 
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
-/** 读取最近 review 活动记录（skill-forge 以 `[review]` 前缀追加到本日志文件）。 */
-function recentReviewActivity(logFile: string): Array<{ time: string; text: string }> {
-  const rows: Array<{ time: string; text: string }> = []
-  try {
-    if (!existsSync(logFile)) return rows
-    for (const line of readFileSync(logFile, 'utf8').split('\n')) {
-      const match = /^\[([^\]]+)\] \[review\] (.*)$/.exec(line.trim())
-      if (match !== null) rows.push({ time: match[1], text: match[2] })
-    }
-  } catch { /* 日志不可读 → 空记录 */ }
-  return rows.slice(-8)
-}
-
 /** 待入库技能清单（pending/skills-staged 下每个 <name>/SKILL.md 一项，按生成时间倒序）。 */
 function listStaged(stagedDir: string): Array<{ name: string; description: string; createdAt: number }> {
   const rows: Array<{ name: string; description: string; createdAt: number }> = []
@@ -197,7 +184,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, stagedPath, skillRootPath, logFile, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, stagedPath, skillRootPath, log)
   }
 
   startHostBridge()
@@ -206,7 +193,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
 }
 
 /** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + staged 管理 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, logFile: string, log: (m: string) => void): Promise<void> {
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soul: '',
     soulPath,
@@ -407,7 +394,6 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     memoryLimit: memoryStore?.usage('memory').limit ?? 0,
     userLimit: memoryStore?.usage('user').limit ?? 0,
     staged: listStaged(stagedPath),
-    recentReviews: recentReviewActivity(logFile),
     skills: state.skills,
     mcp: state.mcp,
     updatedAt: state.updatedAt,
