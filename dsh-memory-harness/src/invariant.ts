@@ -1,10 +1,10 @@
-/** Package-owned durable memory-write invariants. @module @deepseek-ai/dsh-memory-harness/invariant */
+/** Package-owned durable memory-write invariants. @module @dsh-cortex/dsh-memory-harness/invariant */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-memory-harness'
+const PACKAGE_NAME = '@dsh-cortex/dsh-memory-harness'
 const ACTIONS = new Set(['add', 'replace', 'remove'])
 const TARGETS = new Set(['memory', 'user'])
 

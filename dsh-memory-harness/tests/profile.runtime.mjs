@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { resolveProcessProfile, resolveArchiveId, resolveMemoryPaths, DEFAULT_ARCHIVE } from '../.runtime/profile.js'
-import { scanSecrets, hasSecrets } from '../.runtime/security.js'
+// security 已随 v08 §6 抽到共享基建包 dsh-review-core（P2 抽取），此处从 review-core 产物导入
+import { scanSecrets, hasSecrets } from '../../dsh-review-core/.runtime/security.js'
 
 let passed = 0
 const failures = []

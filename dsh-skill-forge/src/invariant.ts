@@ -1,10 +1,10 @@
-/** Package-owned durable skill-write invariants. @module @deepseek-ai/dsh-skill-forge/invariant */
+/** Package-owned durable skill-write invariants. @module @dsh-cortex/dsh-skill-forge/invariant */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@deepseek-ai/dsh-skill-forge'
+const PACKAGE_NAME = '@dsh-cortex/dsh-skill-forge'
 const ACTIONS = new Set(['create', 'patch', 'edit', 'delete'])
 
 /** Cordis companion plugin name. */

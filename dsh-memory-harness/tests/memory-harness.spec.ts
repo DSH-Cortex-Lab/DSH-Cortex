@@ -15,7 +15,7 @@
  *   - `MockAdapter/textResponse/toolCallResponse` 复用 `packages/core/agent-loop/tests/mock-adapter.ts`
  *     （相对路径按本包在 monorepo 中的实际位置调整）。
  *   - `import * as MemoryHarness from 'dsh-memory-harness'` 的 specifier 需改成包实际安装名
- *     （如 vendor 后为 `@deepseek-ai/dsh-memory-harness`）。
+ *     （如 vendor 后为 `@dsh-cortex/dsh-memory-harness`）。
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -31,8 +31,8 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import * as MemoryHarness from '@deepseek-ai/dsh-memory-harness'
-import { SoulProvider } from '@deepseek-ai/dsh-memory-harness'
+import * as MemoryHarness from '@dsh-cortex/dsh-memory-harness'
+import { SoulProvider } from '@dsh-cortex/dsh-memory-harness'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 let seq = 0

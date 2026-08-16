@@ -21,7 +21,7 @@ import {
   parseReviewOutput,
   type MemoryUpdate,
   type ReviewOutput,
-} from '@deepseek-ai/dsh-review-core'
+} from '@dsh-cortex/dsh-review-core'
 
 function fakeSession(events: unknown[]): Session {
   return { events } as unknown as Session

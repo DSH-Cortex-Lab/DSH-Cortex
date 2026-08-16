@@ -22,7 +22,7 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import JobsRuntime from '@deepseek-ai/dsh-jobs-local'
 import * as ToolJobs from '@deepseek-ai/dsh-tool-jobs'
-import * as SkillForge from '@deepseek-ai/dsh-skill-forge'
+import * as SkillForge from '@dsh-cortex/dsh-skill-forge'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 let seq = 0

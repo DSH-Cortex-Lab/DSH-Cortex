@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-review-core",
+  "name": "@dsh-cortex/dsh-review-core",
   "version": "0.1.0",
   "description": "dsh-memory-harness 与 dsh-skill-forge 共享的 review 基建：digest 构造 / 去重 / 安全扫描 / review prompt 与三路输出解析（纯 TS，无 dsh 依赖）",
   "type": "module",

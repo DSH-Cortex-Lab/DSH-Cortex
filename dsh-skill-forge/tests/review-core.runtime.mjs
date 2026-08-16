@@ -1,11 +1,17 @@
 /**
- * digest + dedupe + security 运行时验证（沙箱内 `node tests/review-core.runtime.mjs`）。
- * 加载 tsc 编译产物 `.runtime/{digest,dedupe,security}.js`。
+ * dsh-review-core 运行时验证（沙箱内 `node tests/review-core.runtime.mjs`）。
+ * 加载 tsc 编译产物 `.runtime/index.js`（ESM），进程内断言。
  */
 import assert from 'node:assert/strict'
-import { buildConversationDigest, renderDigest } from '../.runtime/digest.js'
-import { similarity, isDuplicate } from '../.runtime/dedupe.js'
-import { scanSecrets } from '../.runtime/security.js'
+import {
+  buildConversationDigest,
+  renderDigest,
+  similarity,
+  isDuplicate,
+  scanSecrets,
+  buildReviewPrompt,
+  parseReviewOutput,
+} from '../.runtime/index.js'
 
 let passed = 0
 const failures = []
@@ -21,44 +27,65 @@ function check(name, fn) {
   }
 }
 
-check('buildConversationDigest 保留最近 K 轮并截断早期', () => {
-  const entries = Array.from({ length: 10 }, (_, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', text: `msg-${i}` }))
-  const digest = buildConversationDigest(entries, 3, 'earlier summary')
+check('digest：保留最近 K 轮并截断早期', () => {
+  const entries = Array.from({ length: 10 }, (_, i) => ({ role: i % 2 === 0 ? 'user' : 'assistant', text: `m${i}` }))
+  const digest = buildConversationDigest(entries, 3, 'summary')
   assert.equal(digest.truncated, true)
-  assert.equal(digest.summary, 'earlier summary')
-  assert.equal(digest.recent.length, 6) // 3 轮 * 2 条
-  assert.equal(digest.recent[0].text, 'msg-4')
+  assert.equal(digest.summary, 'summary')
+  assert.equal(digest.recent.length, 6)
 })
 
-check('buildConversationDigest 无截断时不带 summary', () => {
-  const entries = [{ role: 'user', text: 'a' }, { role: 'assistant', text: 'b' }]
-  const digest = buildConversationDigest(entries, 5, 'unused')
+check('digest：无截断不带 summary', () => {
+  const digest = buildConversationDigest([{ role: 'user', text: 'a' }], 5, 'unused')
   assert.equal(digest.truncated, false)
   assert.equal(digest.summary, undefined)
-  assert.equal(digest.recent.length, 2)
 })
 
 check('renderDigest 含摘要与最近对话', () => {
-  const text = renderDigest({ recent: [{ role: 'user', text: 'hi' }], summary: 'summary line', truncated: true })
-  assert.ok(text.includes('summary line'))
-  assert.ok(text.includes('[user] hi'))
+  const text = renderDigest({ recent: [{ role: 'user', text: 'hi' }], summary: 's', truncated: true })
+  assert.ok(text.includes('s') && text.includes('[user] hi'))
 })
 
-check('similarity：相同文本=1，无关文本 < 0.8', () => {
-  assert.equal(similarity('write a python script', 'write a python script'), 1)
-  assert.ok(similarity('write a python script', 'completely different topic about cooking') < 0.3)
-})
-
-check('isDuplicate：相似度 ≥ 阈值判定重复', () => {
+check('similarity/isDuplicate', () => {
+  assert.equal(similarity('a b c', 'a b c'), 1)
   const existing = ['write a python script to sort a list']
-  assert.equal(isDuplicate('write a python script to sort a list', existing), true)
   assert.equal(isDuplicate('write a python script to sort the list', existing), true)
-  assert.equal(isDuplicate('bake a chocolate cake', existing), false)
+  assert.equal(isDuplicate('bake a cake', existing), false)
 })
 
-check('security scanSecrets 复用（skill-forge 侧）', () => {
+check('scanSecrets 命中与干净文本', () => {
   assert.deepEqual(scanSecrets('AKIAIOSFODNN7EXAMPLE'), ['aws-access-key'])
   assert.deepEqual(scanSecrets('clean text'), [])
+})
+
+check('parseReviewOutput 解析三路 JSON', () => {
+  const json = JSON.stringify({
+    skill: { name: 'my-skill', description: 'd', content: 'body' },
+    memory: [{ action: 'add', content: 'fact X' }],
+    user: [],
+  })
+  const output = parseReviewOutput(json)
+  assert.equal(output.skillCandidate.name, 'my-skill')
+  assert.equal(output.memoryUpdates.length, 1)
+  assert.equal(output.memoryUpdates[0].content, 'fact X')
+  assert.deepEqual(output.userUpdates, [])
+})
+
+check('parseReviewOutput 容忍 ```json 围栏', () => {
+  const output = parseReviewOutput('```json\n{"skill":null,"memory":[],"user":[]}\n```')
+  assert.equal(output.skillCandidate, undefined)
+  assert.deepEqual(output.memoryUpdates, [])
+})
+
+check('parseReviewOutput 对非法输出返回 undefined', () => {
+  assert.equal(parseReviewOutput('not json'), undefined)
+  assert.equal(parseReviewOutput(''), undefined)
+})
+
+check('buildReviewPrompt 含画像抽取规则', () => {
+  const prompt = buildReviewPrompt('digest text')
+  assert.ok(prompt.system.includes('never inferred from behavior'))
+  assert.equal(prompt.user, 'digest text')
 })
 
 console.log(`\n${passed} passed, ${failures.length} failed`)

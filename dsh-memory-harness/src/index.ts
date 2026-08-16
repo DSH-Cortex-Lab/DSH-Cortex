@@ -26,8 +26,8 @@ export { renderMemorySnapshot, applySnapshot } from './snapshot.ts'
 export type { MemorySnapshotSource } from './snapshot.ts'
 export { SoulProvider, CORE_PERSONALITY_TEXT } from './soul.ts'
 // 安全扫描来自共享基建 dsh-review-core（G4）
-export { scanSecrets, hasSecrets } from '@deepseek-ai/dsh-review-core'
-export type { SecretKind } from '@deepseek-ai/dsh-review-core'
+export { scanSecrets, hasSecrets } from '@dsh-cortex/dsh-review-core'
+export type { SecretKind } from '@dsh-cortex/dsh-review-core'
 export {
   DEFAULT_ARCHIVE,
   resolveArchiveId,

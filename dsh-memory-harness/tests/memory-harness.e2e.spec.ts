@@ -23,7 +23,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import * as MemoryHarness from '@deepseek-ai/dsh-memory-harness'
+import * as MemoryHarness from '@dsh-cortex/dsh-memory-harness'
 
 let seq = 0
 let homes: string[] = []

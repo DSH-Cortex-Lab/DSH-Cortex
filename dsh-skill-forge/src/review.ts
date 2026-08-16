@@ -16,6 +16,14 @@ import type {} from '@deepseek-ai/dsh-jobs'
 // 加载 `compaction/summary` 会话事件类型（D22 摘要复用）
 import type {} from '@deepseek-ai/dsh-compaction'
 import { SkillForge } from './forge.ts'
+
+// 自定义 job kind：dsh 的 JobKindMap 需声明合并扩展（types.ts: "Plugins extend this map by declaration merging"）
+declare module '@deepseek-ai/dsh-jobs' {
+  interface JobKindMap {
+    review: 'review'
+  }
+}
+
 import {
   buildConversationDigest,
   buildReviewPrompt,
@@ -26,7 +34,7 @@ import {
   type DigestEntry,
   type MemoryUpdate,
   type ReviewOutput,
-} from '@deepseek-ai/dsh-review-core'
+} from '@dsh-cortex/dsh-review-core'
 
 /**
  * review 写 MEMORY 所需的最小 store 接口（避免 skill-forge 硬依赖 dsh-memory-harness）。

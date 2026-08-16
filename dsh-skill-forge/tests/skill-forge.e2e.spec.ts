@@ -27,8 +27,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import * as SkillFilesystem from '@deepseek-ai/dsh-skill-filesystem'
 import * as ToolSkill from '@deepseek-ai/dsh-tool-skill'
-import * as SkillForge from '@deepseek-ai/dsh-skill-forge'
-import { parseFrontmatter } from '@deepseek-ai/dsh-skill-forge'
+import * as SkillForge from '@dsh-cortex/dsh-skill-forge'
+import { parseFrontmatter } from '@dsh-cortex/dsh-skill-forge'
 
 let seq = 0
 let homes: string[] = []

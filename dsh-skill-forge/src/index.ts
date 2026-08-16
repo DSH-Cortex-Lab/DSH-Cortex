@@ -29,8 +29,8 @@ export {
   hasSecrets,
   buildReviewPrompt,
   parseReviewOutput,
-} from '@deepseek-ai/dsh-review-core'
-export type { ConversationDigest, DigestEntry, SecretKind, ReviewOutput, SkillCandidate, MemoryUpdate } from '@deepseek-ai/dsh-review-core'
+} from '@dsh-cortex/dsh-review-core'
+export type { ConversationDigest, DigestEntry, SecretKind, ReviewOutput, SkillCandidate, MemoryUpdate } from '@dsh-cortex/dsh-review-core'
 // 本包 review 集成层
 export { ReviewEngine, applyReviewOutput, projectEntries, extractEarlySummary } from './review.ts'
 export type { ReviewConfig, MemoryStoreLike } from './review.ts'

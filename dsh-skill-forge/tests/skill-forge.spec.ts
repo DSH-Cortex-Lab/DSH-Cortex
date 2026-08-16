@@ -22,8 +22,8 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import * as SkillForge from '@deepseek-ai/dsh-skill-forge'
-import { parseFrontmatter } from '@deepseek-ai/dsh-skill-forge'
+import * as SkillForge from '@dsh-cortex/dsh-skill-forge'
+import { parseFrontmatter } from '@dsh-cortex/dsh-skill-forge'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 let seq = 0
