@@ -199,9 +199,12 @@ export function applyReviewOutput(
 ): void {
   const skill = output.skillCandidate
   if (skill !== undefined && skill.content.length >= config.reviewMinResultChars) {
+    // 自动 review 生成的技能统一加 (Auto-save) 后缀（先剥掉可能的重复后缀再追加），
+    // 便于用户在技能目录里一眼区分自动沉淀与人工维护的技能。
+    const description = skill.description.replace(/\s*\(Auto-save\)\s*$/, '') + ' (Auto-save)'
     void forge.create({
       name: skill.name,
-      description: skill.description,
+      description,
       ...(skill.whenToUse !== undefined ? { whenToUse: skill.whenToUse } : {}),
       content: skill.content,
     })
