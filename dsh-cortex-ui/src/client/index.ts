@@ -28,7 +28,7 @@ const TABS = [
   { id: 'persona', label: '人格' },
   { id: 'memory', label: '记忆' },
   { id: 'user', label: '用户画像' },
-  { id: 'skill', label: '技能' },
+  { id: 'skill', label: 'skill' },
   { id: 'mcp', label: 'MCP' },
 ] as const
 
