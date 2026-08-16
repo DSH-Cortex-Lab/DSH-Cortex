@@ -1,7 +1,9 @@
 /**
  * 会话边界 promote（D19/D25）：最后一个 live session 离开后，把 staged 落回扫描根。
  *
- * 崩溃清扫（下一会话启动检测 stagedDir 残留 → 询问/自动 promote）后移至 M4。
+ * 注意（D-d 修订）：本文件的自动 promote 已从装配中移除——staged 改为纯人控入库，
+ * 只经管理面板「入库/丢弃」处理；启动清扫与会话结束自动 promote 会让技能在用户
+ * 未确认时悄悄入库（已踩坑）。函数保留导出供显式命令/测试使用，不再自动接线。
  *
  * @module dsh-skill-forge
  */

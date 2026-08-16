@@ -132,20 +132,29 @@ function revealInExplorer(target: string): boolean {
 
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
-/** 待入库技能清单（pending/skills-staged 下每个 <name>/SKILL.md 一项，按生成时间倒序）。 */
-function listStaged(stagedDir: string): Array<{ name: string; description: string; createdAt: number }> {
-  const rows: Array<{ name: string; description: string; createdAt: number }> = []
+/** 待入库清单（pending/skills-staged：技能项 + 删除标记项，按生成时间倒序）。 */
+function listStaged(stagedDir: string): Array<{ name: string; description: string; createdAt: number; kind: 'skill' | 'delete' }> {
+  const rows: Array<{ name: string; description: string; createdAt: number; kind: 'skill' | 'delete' }> = []
   try {
     if (!existsSync(stagedDir)) return rows
     for (const entry of readdirSync(stagedDir)) {
       const skillPath = join(stagedDir, entry, 'SKILL.md')
-      if (!existsSync(skillPath)) continue
-      try {
-        const raw = readFileSync(skillPath, 'utf8')
-        const name = /^name:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? entry
-        const description = /^description:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? ''
-        rows.push({ name, description, createdAt: statSync(skillPath).mtimeMs })
-      } catch { /* 单个技能不可读则跳过 */ }
+      if (existsSync(skillPath)) {
+        try {
+          const raw = readFileSync(skillPath, 'utf8')
+          const name = /^name:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? entry
+          const description = /^description:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? ''
+          rows.push({ name, description, createdAt: statSync(skillPath).mtimeMs, kind: 'skill' })
+        } catch { /* 单个技能不可读则跳过 */ }
+        continue
+      }
+      if (entry.endsWith('.delete')) {
+        // skill_delete 产生的删除标记：待用户确认后从技能根移除
+        const name = entry.slice(0, -'.delete'.length)
+        if (SKILL_NAME_RE.test(name)) {
+          rows.push({ name, description: '', createdAt: statSync(join(stagedDir, entry)).mtimeMs, kind: 'delete' })
+        }
+      }
     }
   } catch { /* staged 不可读 → 空清单 */ }
   rows.sort((a, b) => b.createdAt - a.createdAt)
@@ -559,15 +568,24 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
             return
           }
           const src = join(stagedPath, name, 'SKILL.md')
-          if (!existsSync(src)) {
-            json(res, 404, { ok: false, error: 'staged skill not found' })
+          const marker = join(stagedPath, `${name}.delete`)
+          if (existsSync(src)) {
+            // 入库：原子写 $DSH_HOME/skills/<name>/SKILL.md（skill-filesystem 会经 Chokidar 触发 skills/change）
+            atomicWrite(join(skillRootPath, name, 'SKILL.md'), readFileSync(src, 'utf8'))
+            rmSync(dirname(src), { recursive: true, force: true })
+            log('staged promote: ' + name)
+            json(res, 200, statusBody())
             return
           }
-          // 入库：原子写 $DSH_HOME/skills/<name>/SKILL.md（skill-filesystem 会经 Chokidar 触发 skills/change）
-          atomicWrite(join(skillRootPath, name, 'SKILL.md'), readFileSync(src, 'utf8'))
-          rmSync(dirname(src), { recursive: true, force: true })
-          log('staged promote: ' + name)
-          json(res, 200, statusBody())
+          if (existsSync(marker)) {
+            // 删除标记经用户确认：从技能根移除
+            rmSync(join(skillRootPath, name), { recursive: true, force: true })
+            rmSync(marker, { force: true })
+            log('staged delete applied: ' + name)
+            json(res, 200, statusBody())
+            return
+          }
+          json(res, 404, { ok: false, error: 'staged skill not found' })
         } catch (e) {
           json(res, 400, { ok: false, error: String(e) })
         }

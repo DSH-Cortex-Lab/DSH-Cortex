@@ -12,7 +12,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { SkillForge } from './forge.ts'
 import { registerSkillTools } from './tools.ts'
-import { applyPromote, cleanupStagedOnStartup } from './promote.ts'
 import { ReviewEngine, type MemoryStoreLike } from './review.ts'
 
 export { SkillForge } from './forge.ts'
@@ -88,8 +87,8 @@ export function apply(ctx: Context, config: Config): void {
   const activityFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const forge = new SkillForge([{ path: skillRoot }], stagedDir, undefined, config.maxSkillBytes)
   registerSkillTools(ctx, forge)
-  applyPromote(ctx, forge)
-  cleanupStagedOnStartup(ctx, forge)
+  // 人控入库（D-d 修订）：staged 只经面板「入库/丢弃」处理。不再自动 promote——
+  // 启动清扫与 session-disposed 自动 promote 会让技能在用户未确认时悄悄入库（已踩坑）。
 
   // 后台 review（v2：cadence 节律触发；D5 ctx.jobs 后台，不阻塞 agent 循环）
   // MEMORY 三路输出②需组合层 `ctx.provide('memoryStore', store)`（dsh-memory-harness 提供），缺省则仅技能路输出。

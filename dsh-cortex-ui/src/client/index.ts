@@ -80,6 +80,7 @@ interface StagedSkillRow {
   name: string
   description: string
   createdAt: number
+  kind: 'skill' | 'delete'
 }
 interface CortexStatus {
   ok: boolean
@@ -618,8 +619,9 @@ const stagedBtn: React.CSSProperties = {
 function StagedSection({ rows, refresh }: { rows: StagedSkillRow[]; refresh: () => void }): React.ReactElement {
   const [busy, setBusy] = useState<string | null>(null)
   const [errMsg, setErrMsg] = useState('')
-  const act = (name: string, action: 'promote' | 'discard'): void => {
-    if (action === 'discard' && !window.confirm(t('staged.discardConfirm') + name)) return
+  const act = (name: string, kind: 'skill' | 'delete', action: 'promote' | 'discard'): void => {
+    if (action === 'discard' && kind === 'skill' && !window.confirm(t('staged.discardConfirm') + name)) return
+    if (action === 'promote' && kind === 'delete' && !window.confirm(t('staged.applyDeleteConfirm') + name)) return
     setBusy(name + action)
     setErrMsg('')
     fetch('/cortex/api/staged/' + action, {
@@ -644,21 +646,23 @@ function StagedSection({ rows, refresh }: { rows: StagedSkillRow[]; refresh: () 
       createElement('span', { style: catalogCount }, String(rows.length))),
     rows.length === 0
       ? createElement('p', { style: statusText }, t('staged.empty'))
-      : rows.map((row) => createElement('div', { style: stagedCard, key: row.name },
+      : rows.map((row) => createElement('div', { style: stagedCard, key: row.kind + row.name },
         createElement('span', { style: stagedName }, row.name),
-        createElement('span', { style: stagedDesc }, row.description || t('list.noDescription')),
+        row.kind === 'delete'
+          ? createElement('span', { style: { ...badge, flexShrink: 0 } }, t('staged.kindDelete'))
+          : createElement('span', { style: stagedDesc }, row.description || t('list.noDescription')),
         createElement('button', {
           type: 'button',
           style: stagedBtn,
           disabled: busy !== null,
-          onClick: () => act(row.name, 'promote'),
-        }, t('staged.promote')),
+          onClick: () => act(row.name, row.kind, 'promote'),
+        }, row.kind === 'delete' ? t('staged.applyDelete') : t('staged.promote')),
         createElement('button', {
           type: 'button',
           style: stagedBtn,
           disabled: busy !== null,
-          onClick: () => act(row.name, 'discard'),
-        }, t('staged.discard')))),
+          onClick: () => act(row.name, row.kind, 'discard'),
+        }, row.kind === 'delete' ? t('staged.cancelDelete') : t('staged.discard')))),
     errMsg !== '' ? createElement('p', { style: { ...statusText, color: 'var(--dsw-alias-state-error-primary)' } }, errMsg) : null,
   )
 }
