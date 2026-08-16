@@ -86,10 +86,11 @@ export interface ReviewCheckpoint {
   lastDigest: string
 }
 
-/** 现有技能目录的一行（写入层去重用）。 */
+/** 现有技能目录的一行（写入层去重用；source 供 prompt 区分可扩展库与受保护技能）。 */
 export interface SkillCatalogRow {
   name: string
   description: string
+  source?: string
 }
 
 /**
@@ -248,7 +249,7 @@ export class ReviewEngine {
       this.activity(`run started (session=${session.id})`)
       const catalog = await this.loadCatalog(agent)
       this.activity(`run: catalog loaded (${catalog.length} skills)`)
-      const catalogText = catalog.map(row => `${row.name}: ${row.description}`).join('\n')
+      const catalogText = catalog.map(row => `${row.name} [source:${row.source ?? 'unknown'}]: ${row.description}`).join('\n')
       const llm = this.ctx.get('llm')
       if (llm === undefined) throw new Error('llm service unavailable for review')
       const prompt = buildReviewPrompt(renderDigest(digest), catalogText)
@@ -300,14 +301,14 @@ export class ReviewEngine {
   private async loadCatalog(agent: Agent | undefined): Promise<SkillCatalogRow[]> {
     try {
       const skills = this.ctx.get('skills') as {
-        list: (options?: unknown) => Promise<Array<{ name: string; description: string }>>
+        list: (options?: unknown) => Promise<Array<{ name: string; description: string; source?: string }>>
       } | undefined
       if (skills === undefined || typeof skills.list !== 'function') return []
       const options = agent !== undefined
         ? { scope: (agent as unknown) ?? undefined, cwd: agent.session?.header?.cwd ?? process.cwd() }
         : undefined
       const rows = await skills.list(options)
-      return rows.map(s => ({ name: s.name, description: s.description }))
+      return rows.map(s => ({ name: s.name, description: s.description, source: s.source }))
     } catch {
       return []
     }

@@ -25,7 +25,7 @@ export interface ReviewOutput {
   userUpdates: MemoryUpdate[]
 }
 
-/** review 提示词（要求只输出 JSON；画像抽取规则：只从用户本人消息抽取，不推断）。 */
+/** review 提示词（要求只输出 JSON；技能判定信号分类学对齐 Hermes background_review；画像抽取只从用户本人消息，不推断）。 */
 export function buildReviewPrompt(digestText: string, catalogText?: string): { system: string; user: string } {
   return {
     system: [
@@ -36,11 +36,33 @@ export function buildReviewPrompt(digestText: string, catalogText?: string): { s
       '  "memory": [{"action":"add|replace|remove","content":"entry text","oldText":"optional, for replace/remove"}],',
       '  "user": [{"action":"add|replace|remove","content":"user-fact text","oldText":"optional"}]',
       '}',
-      'Rules: skill only when the conversation demonstrates a reusable multi-step workflow; memory only for durable environment facts/conventions/lessons, verbatim; user only facts stated BY the user (never inferred from behavior). Output empty arrays / null when there is nothing new.',
-      'Skill naming: prefer reusing an existing skill name from the catalog below when the new learning belongs to the same class of task; only invent a NEW name when no existing skill covers the class. Never name a skill after a one-off session artifact (PR number, error string, "fix-X-today").',
+      '=== SKILL (which task classes are worth encoding) ===',
+      'Be ACTIVE: most sessions with real signal produce at least one skill update. A pass that does nothing when a signal fired is a missed learning opportunity.',
+      'Signals that warrant a skill update (any ONE is enough):',
+      '  - The user corrected your style, tone, format, legibility, or verbosity. Frustration is a first-class signal: "stop doing X", "too verbose", "do not format like this", "you always do Y and I hate it".',
+      '  - The user corrected your workflow, approach, or sequence of steps. Encode the correction as a pitfall or an explicit step.',
+      '  - A non-trivial technique, fix, workaround, debugging path, or tool-usage pattern emerged that a future session would benefit from.',
+      '  - A skill that was loaded or consulted this session turned out wrong, missing a step, or outdated. Fix it now.',
+      'Preference order (pick the earliest that fits):',
+      '  1. REUSE AN EXISTING SKILL NAME from the catalog below when the learning belongs to the same class of task. The system MERGES your content into that skill (appends it), so write only the new increment, not a rewrite of the whole skill.',
+      '  2. CREATE A NEW CLASS-LEVEL SKILL only when no existing skill covers the class. The name MUST be class-level: NOT a PR number, error string, feature codename, library-alone name, or a "fix-X / debug-Y / audit-Z-today" session artifact. If the name only makes sense for today\'s task, it is wrong — reuse an existing name instead.',
+      'Protected skills (DO NOT reuse their names):',
+      '  - Bundled skills (source: bundled).',
+      '  - User-owned or external skills (source: user-agents, project-*, custom).',
+      '  - Only skills marked source: user-dsh in the catalog belong to the auto-save library and may be extended. If the only fitting skills are protected, fall through to a new class-level name or output null.',
+      'Do NOT capture (these become persistent self-imposed constraints that bite later):',
+      '  - Environment-dependent failures: missing binaries, fresh-install errors, post-migration path mismatches, "command not found", unconfigured credentials, uninstalled packages.',
+      '  - Negative claims about tools or features ("X tool does not work", "cannot use Y"). They harden into refusals cited for months after the problem is fixed.',
+      '  - Session-specific transient errors that resolved before the conversation ended. If retrying worked, the lesson is the retry pattern, not the original failure.',
+      '  - One-off task narratives. "Summarize today\'s market" is not a class of work.',
+      '  - Unresolved failures: if the session ended WITHOUT finding a working method, never dress the dead ends up as a reliable workflow. Either output null, or capture only a real working alternative you are confident in — never the failed attempts.',
+      '=== MEMORY (durable environment facts) ===',
+      'memory only for durable environment facts / conventions / lessons, verbatim, short entries; never for transient state.',
+      '=== USER (who the user is) ===',
+      'user only facts stated BY the user (never inferred from behavior). Output empty arrays / null when there is nothing new.',
     ].join('\n'),
     user: catalogText !== undefined && catalogText.length > 0
-      ? '## 现有技能目录（name: description）\n' + catalogText + '\n\n' + digestText
+      ? '## Existing skill catalog (name [source]: description)\n' + catalogText + '\n\n' + digestText
       : digestText,
   }
 }
