@@ -75,3 +75,11 @@ export function resolveHomePath(configHomePath?: string): string {
   if (envHome !== undefined && envHome.length > 0) return envHome
   return join(homedir(), '.dsh')
 }
+
+/**
+ * 解析 core-personality.md 路径：固定在 $DSH_HOME 根（跨档案全局），不随 profile 定位
+ * （区别于 SOUL 的档案级定位——core 是全局机器底线，见 core 评审意见）。
+ */
+export function resolveCoreFile(homePath: string): string {
+  return join(homePath, 'core-personality.md')
+}
