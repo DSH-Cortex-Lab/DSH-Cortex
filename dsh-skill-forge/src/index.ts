@@ -85,6 +85,7 @@ export function apply(ctx: Context, config: Config): void {
   const skillRoot = config.skillRoot.length > 0 ? config.skillRoot : join(homePath, 'skills')
   const stagedDir = config.stagedDir.length > 0 ? config.stagedDir : join(homePath, 'pending', 'skills-staged')
   const checkpointFile = join(homePath, 'pending', 'review-checkpoints.json')
+  const activityFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const forge = new SkillForge([{ path: skillRoot }], stagedDir, undefined, config.maxSkillBytes)
   registerSkillTools(ctx, forge)
   applyPromote(ctx, forge)
@@ -111,6 +112,7 @@ export function apply(ctx: Context, config: Config): void {
       config.reviewProvider,
       config.reviewModel,
       checkpointFile,
+      activityFile,
     )
     engine.attach()
   }

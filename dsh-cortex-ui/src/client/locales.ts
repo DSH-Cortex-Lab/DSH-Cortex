@@ -34,6 +34,8 @@ export type CortexUiKey =
   | 'staged.promote'
   | 'staged.discard'
   | 'staged.discardConfirm'
+  | 'review.recent'
+  | 'review.none'
   | 'user.intro'
   | 'user.placeholder'
   | 'memory.intro'
@@ -94,6 +96,8 @@ export const zh: CortexUiDict = {
   'staged.promote': '入库',
   'staged.discard': '丢弃',
   'staged.discardConfirm': '确定丢弃技能 ',
+  'review.recent': '自动总结记录',
+  'review.none': '暂无自动总结记录（当前测试期：每 2 轮自动触发一次）',
   'user.intro': '用户画像（USER.md）记录关于用户的持久事实与偏好：称呼、背景、目标、约束。由记忆/复盘流程自动维护，也可在此手动编辑；保存后原子写回 USER.md，下次请求生效。',
   'user.placeholder': '在此编辑用户画像…',
   'memory.intro': '记忆（MEMORY.md）是 agent 的长期记忆：跨会话保留的关键事实、任务进展与经验教训。由复盘（review）流程自动写入，也可在此手动编辑；保存后原子写回 MEMORY.md，下次请求生效。',
@@ -153,6 +157,8 @@ export const en: CortexUiDict = {
   'staged.promote': 'Promote',
   'staged.discard': 'Discard',
   'staged.discardConfirm': 'Discard skill ',
+  'review.recent': 'Auto-review activity',
+  'review.none': 'No auto-review activity yet (test phase: triggers every 2 turns)',
   'user.intro': 'The user profile (USER.md) holds durable facts and preferences about the user: name, background, goals, constraints. Maintained by the memory/review flows and editable here; saving writes USER.md atomically and takes effect on the next request.',
   'user.placeholder': 'Edit the user profile here…',
   'memory.intro': 'Memory (MEMORY.md) is the agent long-term memory: key facts, task progress, and lessons kept across sessions. Written automatically by the review flow and editable here; saving writes MEMORY.md atomically and takes effect on the next request.',

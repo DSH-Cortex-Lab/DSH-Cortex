@@ -19,7 +19,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -167,6 +167,8 @@ export class ReviewEngine {
     private readonly model: string,
     /** checkpoint 持久化文件（$DSH_HOME/pending/review-checkpoints.json）。 */
     private readonly checkpointFile: string,
+    /** review 活动日志（追加到 cortex-ui 日志文件，面板「自动总结记录」读取）。 */
+    private readonly activityFile: string,
     /** v08 S4-2：review 落盘 MEMORY/USER 同样 append memory/write 审计事件（由组合层接线到 memory 插件）。 */
     private readonly onMemoryWrite?: (update: MemoryUpdate) => void,
   ) {
@@ -176,6 +178,7 @@ export class ReviewEngine {
   /** 触发接线（v2）：cadence = 空闲节律检查；session-end = 会话销毁；off = 不触发。 */
   attach(): void {
     if (!this.config.reviewEnabled || this.config.reviewTrigger === 'off') return
+    this.activity(`engine attached (trigger=${this.config.reviewTrigger}, turn=${this.config.reviewTurnInterval}, tool=${this.config.reviewToolInterval}, model=${this.provider}/${this.model})`)
     if (this.config.reviewTrigger === 'session-end') {
       this.ctx.on('session/disposed', session => this.reviewSession(undefined, session))
       return
@@ -192,6 +195,7 @@ export class ReviewEngine {
       const reason = deltaUser >= this.config.reviewTurnInterval ? 'turn' : 'tool'
       this.activeJobs.add(session.id)
       this.log('review triggered (reason=%s, session=%s, deltaUser=%d, deltaTools=%d)', reason, session.id, deltaUser, deltaTools)
+      this.activity(`triggered (reason=${reason}, session=${session.id}, deltaUser=${deltaUser}, deltaTools=${deltaTools})`)
       this.reviewSession(agent, session)
     })
   }
@@ -227,8 +231,14 @@ export class ReviewEngine {
       run: () => {
         let cancelled = false
         const done = this.run(agent, session, digest, checkpoint).then(
-          output => (cancelled ? { status: 'killed' as const } : { status: 'completed' as const, detail: summarize(output) }),
-          error => ({ status: 'failed' as const, detail: String(error) }),
+          output => {
+            this.activity(`completed (${summarize(output)}, session=${session.id})`)
+            return cancelled ? { status: 'killed' as const } : { status: 'completed' as const, detail: summarize(output) }
+          },
+          error => {
+            this.activity(`failed (session=${session.id}): ${String(error)}`)
+            return { status: 'failed' as const, detail: String(error) }
+          },
         )
         return { cancel() { cancelled = true }, done }
       },
@@ -346,6 +356,15 @@ export class ReviewEngine {
 
   private log(message: string, ...args: unknown[]): void {
     this.ctx.logger?.info?.(`dsh-skill-forge ${message}`, ...args)
+  }
+
+  /** review 活动记录：追加到 activityFile（面板「自动总结记录」读取；失败静默不影响 review）。 */
+  private activity(line: string): void {
+    try {
+      const dir = dirname(this.activityFile)
+      if (dir !== '.' && !existsSync(dir)) mkdirSync(dir, { recursive: true })
+      appendFileSync(this.activityFile, `[${new Date().toISOString()}] [review] ${line}\n`, 'utf8')
+    } catch { /* 日志失败静默 */ }
   }
 }
 
