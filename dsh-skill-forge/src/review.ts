@@ -143,6 +143,9 @@ function digestOf(entries: readonly DigestEntry[]): string {
   return createHash('sha256').update(canonical).digest('hex')
 }
 
+/** 增量窗口上限：首次 review（无 checkpoint）的大历史会话不一次全量重放。 */
+const INCREMENTAL_CAP = 60
+
 async function collectText(stream: AsyncIterable<StreamChunk>): Promise<string> {
   let text = ''
   for await (const chunk of stream) {
@@ -214,35 +217,22 @@ export class ReviewEngine {
       return
     }
     const digest = buildConversationDigest(entries, this.config.reviewRecentTurns, extractEarlySummary(session))
-    if (incremental.length > 0) digest.incremental = incremental
+    if (incremental.length > 0) digest.incremental = incremental.slice(-INCREMENTAL_CAP)
     void this.schedule(agent, session, digest, checkpoint)
   }
 
-  /** 后台 job（ctx.jobs；D5 不阻塞 agent 循环；job 进行中去重 + 失败不重试风暴）。 */
+  /**
+   * 后台执行（fire-and-forget）：直接跑 run()，不经过 ctx.jobs。
+   * 原因：dsh 的 jobs 注册表按 owner（agent）找控制器后端，'review' kind 没有
+   * 对应控制器，jobs.start() 会同步抛 'no job controller serves this agent'，
+   * job 永远不会执行。我们自有 activeJobs 去重 + 180s 超时 + 活动日志，足以替代。
+   */
   private schedule(agent: Agent | undefined, session: Session, digest: ConversationDigest, checkpoint: ReviewCheckpoint | undefined): void {
-    const jobs = this.ctx.get('jobs')
-    if (jobs === undefined) {
-      this.activeJobs.delete(session.id)
-      return
-    }
-    jobs.start({
-      kind: 'review',
-      label: 'session review',
-      run: () => {
-        let cancelled = false
-        const done = this.run(agent, session, digest, checkpoint).then(
-          output => {
-            this.activity(`completed (${summarize(output)}, session=${session.id})`)
-            return cancelled ? { status: 'killed' as const } : { status: 'completed' as const, detail: summarize(output) }
-          },
-          error => {
-            this.activity(`failed (session=${session.id}): ${String(error)}`)
-            return { status: 'failed' as const, detail: String(error) }
-          },
-        )
-        return { cancel() { cancelled = true }, done }
-      },
-    })
+    this.activity(`scheduled (session=${session.id})`)
+    void this.run(agent, session, digest, checkpoint).then(
+      output => this.activity(`completed (${summarize(output)}, session=${session.id})`),
+      error => this.activity(`failed (session=${session.id}): ${String(error)}`),
+    )
   }
 
   /** 一次 review：目录 → prompt → 模型 → 解析 → 应用（三路输出）→ checkpoint 落盘。 */
