@@ -5,7 +5,7 @@
  * （M1b：USER 槽位开启，userFile/userLimit 生效）。
  *
  * 文件格式（对齐 Hermes MEMORY.md）：条目以独占一行的 `§` 分隔，多行条目保留内部换行。
- * usage = 条目内容字符数之和（不含分隔符）。
+ * usage = 条目内容 UTF-8 字节数之和（不含分隔符）；容量上限单位同为字节。
  *
  * @module dsh-memory-harness
  */
@@ -75,9 +75,9 @@ export function serializeEntries(entries: readonly string[]): string {
     .join(`\n${SEPARATOR}\n`)
 }
 
-/** 条目内容字符数之和（不含分隔符）。 */
+/** 条目内容 UTF-8 字节数之和（不含分隔符；单位与容量上限一致：字节）。 */
 function usageOf(entries: readonly string[]): number {
-  return entries.reduce((sum, entry) => sum + entry.length, 0)
+  return entries.reduce((sum, entry) => sum + Buffer.byteLength(entry, 'utf8'), 0)
 }
 
 /** 原子写：先写临时文件再 rename，杜绝半写态（D28）。 */
@@ -93,12 +93,18 @@ export class MemoryStore {
   constructor(
     private readonly memoryFile: string,
     private readonly userFile: string,
-    private readonly memoryLimit: number,
-    private readonly userLimit: number,
+    private memoryLimit: number,
+    private userLimit: number,
     private readonly fs: MemoryFs = nodeFs,
     /** 绑定的档案 ID（'default' 或 profile 名）；跨档案写保护（D23/v08 S1）据此校验。 */
     readonly archiveId = 'default',
   ) {}
+
+  /** 运行时调整容量上限（管理面板可调；只影响后续写入与 usage，不触碰已有条目）。 */
+  setLimits(memoryLimit: number, userLimit: number): void {
+    if (Number.isInteger(memoryLimit) && memoryLimit > 0) this.memoryLimit = memoryLimit
+    if (Number.isInteger(userLimit) && userLimit > 0) this.userLimit = userLimit
+  }
 
   /** 跨档案写保护（防御性）：校验传入档案 ID 与 store 绑定档案一致，写他档拒绝。 */
   assertArchive(expected: string): void {
@@ -163,6 +169,7 @@ export class MemoryStore {
     return { success: true, usage: usageOf(next), limit: this.limitFor(target) }
   }
 
+  /** 当前目标 usage（字段名沿用 chars，语义为 UTF-8 字节数）与容量上限。 */
   usage(target: MemoryTarget): { chars: number; limit: number } {
     const entries = this.isSupported(target) ? this.readEntries(target) : []
     return { chars: usageOf(entries), limit: this.limitFor(target) }
@@ -195,7 +202,7 @@ export class MemoryStore {
         success: false,
         usage: usageOf(current),
         limit: this.limitFor(target),
-        error: `over-limit: would exceed the configured ${this.limitFor(target)}-character limit`,
+        error: `over-limit: would exceed the configured ${this.limitFor(target)}-byte limit`,
         currentEntries: current,
       }
     }

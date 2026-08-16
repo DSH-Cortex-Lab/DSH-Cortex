@@ -138,6 +138,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   const memoryPath = memoryPaths.memoryFile
   // core-personality.md 固定在 $DSH_HOME 根（全局、跨档案，不随 profile）
   const corePath = resolveCoreFile(homePath)
+  // 容量上限持久化文件（与 memory 插件 apply 时读取的路径一致）
+  const limitsPath = join(homePath, 'cortex-limits.json')
   const logFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const log = (msg: string): void => {
     try {
@@ -154,7 +156,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, log)
   }
 
   startHostBridge()
@@ -162,8 +164,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   ctx.effect(() => () => { clearInterval(bridgeTimer) })
 }
 
-/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, log: (m: string) => void): Promise<void> {
+/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + skill/MCP 快照 */
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soul: '',
     soulPath,
@@ -344,6 +346,13 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
   log('diagnostic: services=' + JSON.stringify(debugBody().services) + ' loaderRows=' + JSON.stringify(loaderRows))
   log('diagnostic paths: soul=' + state.soulPath + ' user=' + state.userPath + ' memory=' + state.memoryPath + ' core=' + state.corePath)
 
+  /** memory-harness 经 bundle 层提供的组合服务（root 层，include 子树可读父级服务）。 */
+  interface MemoryStoreSvc {
+    usage: (target: string) => { chars: number; limit: number }
+    setLimits: (memoryLimit: number, userLimit: number) => void
+  }
+  const memoryStore = ctx.get('memoryStore') as MemoryStoreSvc | undefined
+
   const statusBody = (): unknown => ({
     ok: true,
     soul: state.soul,
@@ -354,6 +363,8 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     memoryPath: state.memoryPath,
     core: state.core,
     corePath: state.corePath,
+    memoryLimit: memoryStore?.usage('memory').limit ?? 0,
+    userLimit: memoryStore?.usage('user').limit ?? 0,
     skills: state.skills,
     mcp: state.mcp,
     updatedAt: state.updatedAt,
@@ -461,6 +472,45 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
 
   ctx.effect(() => webServer.register({
     kind: 'exact',
+    path: '/cortex/api/limits',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data) as { memoryLimit?: unknown; userLimit?: unknown }
+          const valid = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 100 && v <= 100000
+          if (body.memoryLimit !== undefined && !valid(body.memoryLimit)) {
+            json(res, 400, { ok: false, error: 'memoryLimit must be an integer between 100 and 100000' })
+            return
+          }
+          if (body.userLimit !== undefined && !valid(body.userLimit)) {
+            json(res, 400, { ok: false, error: 'userLimit must be an integer between 100 and 100000' })
+            return
+          }
+          const current = {
+            memoryLimit: memoryStore?.usage('memory').limit ?? 0,
+            userLimit: memoryStore?.usage('user').limit ?? 0,
+          }
+          const next = {
+            memoryLimit: body.memoryLimit === undefined ? current.memoryLimit : body.memoryLimit,
+            userLimit: body.userLimit === undefined ? current.userLimit : body.userLimit,
+          }
+          // 持久化（memory 插件重启时读取）+ 运行时即时生效
+          atomicWrite(limitsPath, JSON.stringify(next, null, 2) + '\n')
+          memoryStore?.setLimits(next.memoryLimit, next.userLimit)
+          log('limits updated: memory=' + next.memoryLimit + ' user=' + next.userLimit)
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: limits route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
     path: '/cortex/api/skill/locate',
     handler: (req, res) => {
       let data = ''
@@ -493,5 +543,5 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     },
   }), 'dsh-cortex-ui: skill locate route')
 
-  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/core + /cortex/api/user + /cortex/api/memory + /cortex/api/skill/locate）')
+  log('webServer 路由已注册（/cortex/api/status + /cortex/api/soul + /cortex/api/core + /cortex/api/user + /cortex/api/memory + /cortex/api/limits + /cortex/api/skill/locate + /cortex/api/debug）')
 }

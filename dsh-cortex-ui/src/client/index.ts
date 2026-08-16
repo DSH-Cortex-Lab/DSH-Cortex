@@ -84,6 +84,8 @@ interface CortexStatus {
   userPath: string
   memory: string
   memoryPath: string
+  memoryLimit: number
+  userLimit: number
   core: string
   corePath: string
   skills: SkillRow[]
@@ -420,7 +422,7 @@ function FileEditor({ value, path, endpoint, field, placeholder }: FileEditorPro
       createElement('code', { style: { ...rowDetailCode, flex: 1 } }, path || t('persona.noBridge')),
       phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, t('editor.saveFailed') + errMsg) : null,
       phase === 'saved' ? createElement('span', { style: saveNote }, t('editor.saved')) : null,
-      createElement('span', { style: saveNote }, draft.length + ' ' + t('persona.chars')),
+      createElement('span', { style: saveNote }, new TextEncoder().encode(draft).length + ' ' + t('editor.bytes')),
       createElement('button', {
         type: 'button',
         style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
@@ -430,10 +432,90 @@ function FileEditor({ value, path, endpoint, field, placeholder }: FileEditorPro
   )
 }
 
-/** 用户画像 tab：USER.md 编辑器 */
+// ── 容量上限设置（memory/user 各自一行：数值输入 + 保存）──
+const limitRow: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, maxWidth: 720,
+}
+const limitInput: React.CSSProperties = {
+  width: 96, border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8,
+  padding: '4px 10px', fontSize: 13, background: 'var(--dsw-alias-bg-layer-1)',
+  color: 'var(--dsw-alias-label-primary)', outline: 'none', fontFamily: 'inherit',
+}
+
+/** 单个上限的编辑控件：POST /cortex/api/limits；输入中不被轮询覆盖（touched）。 */
+function LimitControl({ value, field }: { value: number; field: 'memoryLimit' | 'userLimit' }): React.ReactElement {
+  const [draft, setDraft] = useState(String(value))
+  const [touched, setTouched] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [errMsg, setErrMsg] = useState('')
+
+  useEffect(() => {
+    if (!touched) setDraft(String(value))
+  }, [value, touched])
+
+  useEffect(() => {
+    if (phase !== 'saved') return
+    const timer = setTimeout(() => setPhase('idle'), 2000)
+    return () => clearTimeout(timer)
+  }, [phase])
+
+  const save = (): void => {
+    const num = Number(draft)
+    if (!Number.isInteger(num) || num < 100 || num > 100000) {
+      setPhase('error')
+      setErrMsg(t('limit.invalid'))
+      return
+    }
+    setPhase('saving')
+    fetch('/cortex/api/limits', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ [field]: num }),
+    }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) {
+          const data = d as { error?: string }
+          setPhase('error')
+          setErrMsg(data.error ?? String(d))
+          return
+        }
+        setTouched(false)
+        setPhase('saved')
+      })
+      .catch((e) => { setPhase('error'); setErrMsg(String(e)) })
+  }
+
+  return createElement('div', { style: limitRow },
+    createElement('span', { style: saveNote }, t('limit.label')),
+    createElement('input', {
+      type: 'number',
+      style: limitInput,
+      value: draft,
+      min: 100,
+      max: 100000,
+      step: 100,
+      'aria-label': t('limit.label'),
+      onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+        setDraft(e.target.value)
+        setTouched(true)
+        if (phase !== 'idle') setPhase('idle')
+      },
+    }),
+    phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, errMsg) : null,
+    phase === 'saved' ? createElement('span', { style: saveNote }, t('editor.saved')) : null,
+    createElement('button', {
+      type: 'button',
+      style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
+      disabled: phase === 'saving',
+      onClick: save,
+    }, phase === 'saving' ? t('editor.saving') : t('editor.save')))
+}
+
+/** 用户画像 tab：上限设置 + USER.md 编辑器 */
 function UserTab({ status }: { status: CortexStatus | null }): React.ReactElement {
   return createElement('div', null,
     createElement('p', { style: statusText }, t('user.intro')),
+    createElement(LimitControl, { value: status?.userLimit ?? 0, field: 'userLimit' }),
     createElement(FileEditor, {
       value: status?.user ?? '',
       path: status?.userPath ?? '',
@@ -443,10 +525,11 @@ function UserTab({ status }: { status: CortexStatus | null }): React.ReactElemen
     }))
 }
 
-/** 记忆 tab：MEMORY.md 编辑器 */
+/** 记忆 tab：上限设置 + MEMORY.md 编辑器 */
 function MemoryTab({ status }: { status: CortexStatus | null }): React.ReactElement {
   return createElement('div', null,
     createElement('p', { style: statusText }, t('memory.intro')),
+    createElement(LimitControl, { value: status?.memoryLimit ?? 0, field: 'memoryLimit' }),
     createElement(FileEditor, {
       value: status?.memory ?? '',
       path: status?.memoryPath ?? '',

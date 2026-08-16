@@ -128,7 +128,7 @@ function renderWriteResult(value: WriteResult): string {
     const list = entries.length === 0
       ? '(empty)'
       : entries.map((entry, index) => `${index + 1}. ${entry}`).join('\n')
-    return `Memory is over the ${value.limit}-character limit (current usage ${value.usage}). Current entries:\n${list}\nConsolidate or remove entries, then retry.`
+    return `Memory is over the ${value.limit}-byte limit (current usage ${value.usage} bytes). Current entries:\n${list}\nConsolidate or remove entries, then retry.`
   }
   return `Memory write failed: ${value.error ?? 'unknown error'}`
 }

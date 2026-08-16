@@ -7,6 +7,8 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { MemoryStore } from './store.ts'
 import { applySnapshot } from './snapshot.ts'
@@ -56,10 +58,10 @@ export interface Config {
   profile?: string
 }
 
-/** Schemastery 配置（D7：writeApproval 默认 false，即全自动落盘）。 */
+/** Schemastery 配置（D7：writeApproval 默认 false，即全自动落盘）。上限单位：UTF-8 字节。 */
 export const Config: z<Config> = z.object({
-  memoryLimit: z.number().default(2200),
-  userLimit: z.number().default(1375),
+  memoryLimit: z.number().default(2000),
+  userLimit: z.number().default(1500),
   includeSoul: z.boolean().default(true),
   includeSnapshot: z.boolean().default(true),
   writeApproval: z.boolean().default(false),
@@ -73,11 +75,28 @@ export function apply(ctx: Context, config: Config): void {
   const processProfile = resolveProcessProfile(ctx.baseUrl, homePath)
   const archiveId = resolveArchiveId(config.profile, processProfile)
   const paths = resolveMemoryPaths(homePath, archiveId === DEFAULT_ARCHIVE ? undefined : archiveId)
+  // 管理面板可调上限：cortex-limits.json 存在时覆盖 schema 默认（面板保存后重启仍生效）
+  const limits = {
+    memoryLimit: config.memoryLimit,
+    userLimit: config.userLimit,
+  }
+  const limitsFile = join(homePath, 'cortex-limits.json')
+  try {
+    if (existsSync(limitsFile)) {
+      const saved = JSON.parse(readFileSync(limitsFile, 'utf8')) as { memoryLimit?: unknown; userLimit?: unknown }
+      if (typeof saved.memoryLimit === 'number' && Number.isInteger(saved.memoryLimit) && saved.memoryLimit > 0) {
+        limits.memoryLimit = saved.memoryLimit
+      }
+      if (typeof saved.userLimit === 'number' && Number.isInteger(saved.userLimit) && saved.userLimit > 0) {
+        limits.userLimit = saved.userLimit
+      }
+    }
+  } catch { /* limits 文件损坏时回退 schema 默认 */ }
   const store = new MemoryStore(
     paths.memoryFile,
     paths.userFile,
-    config.memoryLimit,
-    config.userLimit,
+    limits.memoryLimit,
+    limits.userLimit,
     undefined,
     archiveId,
   )

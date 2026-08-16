@@ -1,4 +1,4 @@
-/**
+﻿/**
  * dsh-cortex-ui 文案字典（namespace: cortex-ui）。
  * 双语平衡：zh 与 en 的 key 一一对应。
  */
@@ -25,7 +25,6 @@ export type CortexUiKey =
   | 'persona.coreGuide'
   | 'persona.corePlaceholder'
   | 'persona.noBridge'
-  | 'persona.chars'
   | 'skill.intro'
   | 'skill.heading'
   | 'skill.locateOpen'
@@ -38,6 +37,9 @@ export type CortexUiKey =
   | 'editor.saving'
   | 'editor.saved'
   | 'editor.saveFailed'
+  | 'editor.bytes'
+  | 'limit.label'
+  | 'limit.invalid'
   | 'mcp.intro'
   | 'mcp.heading'
   | 'list.search'
@@ -78,7 +80,6 @@ export const zh: CortexUiDict = {
   'persona.coreGuide': '底线守则默认不动；要改你的主要人格请编辑档案人格（SOUL）。',
   'persona.corePlaceholder': '在此编辑机器底线守则…',
   'persona.noBridge': '（未连接 host 桥）',
-  'persona.chars': '字符',
   'skill.intro': '来自 ctx.skills 读端（filesystem provider 扫描 $DSH_HOME/skills、项目 .dsh/skills、~/.agents 与 bundled 技能，rank 100–600）。',
   'skill.heading': '技能目录',
   'skill.locateOpen': '打开具体位置',
@@ -91,6 +92,9 @@ export const zh: CortexUiDict = {
   'editor.saving': '保存中…',
   'editor.saved': '已保存',
   'editor.saveFailed': '保存失败：',
+  'editor.bytes': '字节',
+  'limit.label': '最大大小（UTF-8 字节）：',
+  'limit.invalid': '请输入 100-100000 之间的整数',
   'mcp.intro': '来自 loader 装配的 mcp-client 插件实例（每个实例连接一个 MCP 服务器，工具以 mcp__<server>__<tool> 暴露）。',
   'mcp.heading': 'MCP 服务器',
   'list.search': '搜索',
@@ -130,7 +134,6 @@ export const en: CortexUiDict = {
   'persona.coreGuide': 'Leave the baseline alone by default; edit the archive persona (SOUL) to change your main personality.',
   'persona.corePlaceholder': 'Edit the machine baseline rules here…',
   'persona.noBridge': '(host bridge not connected)',
-  'persona.chars': 'chars',
   'skill.intro': 'From the ctx.skills read side (the filesystem provider scans $DSH_HOME/skills, project .dsh/skills, ~/.agents, and bundled skills; ranks 100–600).',
   'skill.heading': 'Skill catalog',
   'skill.locateOpen': 'Open file location',
@@ -143,6 +146,9 @@ export const en: CortexUiDict = {
   'editor.saving': 'Saving…',
   'editor.saved': 'Saved',
   'editor.saveFailed': 'Save failed: ',
+  'editor.bytes': 'bytes',
+  'limit.label': 'Max size (UTF-8 bytes): ',
+  'limit.invalid': 'Enter an integer between 100 and 100000',
   'mcp.intro': 'From the mcp-client plugin instances in the loader assembly (each instance connects to one MCP server; tools are exposed as mcp__<server>__<tool>).',
   'mcp.heading': 'MCP servers',
   'list.search': 'Search',
