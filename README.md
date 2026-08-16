@@ -157,6 +157,7 @@ node dsh-skill-forge/tests/forge.runtime.mjs
 | 贡献者 | 贡献 |
 |---|---|
 | [QinYun165](https://github.com/QinYun165) | 插件实现（memory-harness / skill-forge / review-core） |
+| LAN-TINA-WS | 管理面板 UI（dsh-cortex-ui）/ 装配集成 / 文档 |
 
 ## 开发者文档
 

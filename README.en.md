@@ -156,6 +156,7 @@ Issues, feature requests, and design discussions: file at [GitHub Issues](https:
 | Contributor | Contribution |
 |---|---|
 | [QinYun165](https://github.com/QinYun165) | plugin implementation (memory-harness / skill-forge / review-core) |
+| LAN-TINA-WS | management panel UI (dsh-cortex-ui) / assembly & integration / docs |
 
 ## Developer Documentation
 
