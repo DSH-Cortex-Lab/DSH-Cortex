@@ -5,6 +5,7 @@ docs/*
 !docs/交付与交接.md
 !docs/验收报告.md
 !docs/开发准则.md
+!docs/core-personality可编辑改造.md
 
 # Node 依赖与构建产物
 node_modules/
