@@ -164,6 +164,7 @@ Issues, feature requests, and design discussions: file at [GitHub Issues](https:
 |---|---|
 | [docs/架构说明.md](docs/架构说明.md) | architecture and key mechanisms |
 | [docs/自动技能化机制设计.md](docs/自动技能化机制设计.md) | final auto-review design: cadence triggers / checkpoint / write-layer dedupe / staged human-in-the-loop |
+| [docs/skill-forge现状与启停说明.md](docs/skill-forge现状与启停说明.md) | skill-forge dev log: verification matrix / Hermes comparison / stop & start conditions |
 | [docs/验收报告.md](docs/验收报告.md) | four-layer acceptance records |
 | [docs/交付与交接.md](docs/交付与交接.md) | deliverables and handover notes |
 | [docs/开发准则.md](docs/开发准则.md) | development conventions (no emoji + review rules) |

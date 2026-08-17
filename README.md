@@ -165,6 +165,7 @@ node dsh-skill-forge/tests/forge.runtime.mjs
 |---|---|
 | [docs/架构说明.md](docs/架构说明.md) | 架构设计与关键机制 |
 | [docs/自动技能化机制设计.md](docs/自动技能化机制设计.md) | 自动总结（review）机制设计定稿：节律触发 / checkpoint / 写入层去重 / staged 人控入库 |
+| [docs/skill-forge现状与启停说明.md](docs/skill-forge现状与启停说明.md) | skill-forge 开发日志：验证矩阵 / Hermes 对比 / 停机与启动条件 |
 | [docs/验收报告.md](docs/验收报告.md) | 四层验收记录 |
 | [docs/交付与交接.md](docs/交付与交接.md) | 交付物与交接说明 |
 | [docs/开发准则.md](docs/开发准则.md) | 开发准则（严禁 emoji + review 四项铁律） |

@@ -322,10 +322,22 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
   ctx.effect(() => () => { clearInterval(timer) })
 
   // ── webServer 路由 ──
-  const webServer = (ctx as unknown as { webServer?: WebServerLike }).webServer
-  if (!webServer || typeof webServer.register !== 'function') {
+  const webServerRaw = (ctx as unknown as { webServer?: WebServerLike }).webServer
+  if (!webServerRaw || typeof webServerRaw.register !== 'function') {
     log('webServer 不可用（preset 层也拿不到）——UI 将无数据')
     return
+  }
+  // 防重复装配护盾：若本插件被第二个装配源重复加载，第二个实例注册同名路由会抛
+  // 'duplicate exact route' 并 fatal 整个 DSH——这里静默跳过，让第一个实例继续服务。
+  const webServer: WebServerLike = {
+    register: (route) => {
+      try {
+        return webServerRaw.register(route)
+      } catch (e) {
+        log('route register skipped (' + route.path + ', duplicate assembly?): ' + String(e))
+        return () => {}
+      }
+    },
   }
 
   const json = (res: import('node:http').ServerResponse, code: number, body: unknown): void => {

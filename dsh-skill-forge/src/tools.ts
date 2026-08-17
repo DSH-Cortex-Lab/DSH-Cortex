@@ -1,6 +1,8 @@
 /**
- * 技能写端工具：skill_create / skill_patch / skill_edit / skill_delete（一律写 staged，D3/D19）
- * + skill_promote（显式会话边界 promote，D19/D25 的显式路径）。
+ * 技能写端工具：skill_create / skill_patch / skill_edit / skill_delete（一律写 staged，D3/D19）。
+ *
+ * 人控入库（D-d 修订）：不注册 skill_promote——入库唯一入口是管理面板的「入库」按钮，
+ * agent 无法自行把 staged 落回扫描根（防止绕过人工审批）。
  *
  * 每次成功写 append `skill/write` 审计事件（log-only）。工具 schema/描述不含运行时数据（D17）。
  *
@@ -118,20 +120,6 @@ export function registerSkillTools(ctx: Context, forge: SkillForge): void {
       return result
     },
     presentCall: args => ({ card: 'generic', title: 'skill_delete', kind: 'other', rawInput: args.name }),
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'skill_promote',
-    description: 'Promote all staged skill changes (creates/patches/edits/deletes) into the skill scan root now. Normally this happens automatically at the session boundary.',
-    parameters: {
-      name: { type: 'string', description: 'Optional: promote only this one skill name.' },
-    },
-    output: FORGE_OUTPUT,
-    async execute(args) {
-      const result = await forge.promote(args.name)
-      return result
-    },
-    presentCall: args => ({ card: 'generic', title: 'skill_promote', kind: 'other', rawInput: args.name }),
   }))
 }
 
