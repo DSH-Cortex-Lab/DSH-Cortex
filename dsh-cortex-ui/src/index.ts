@@ -201,43 +201,43 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   ctx.effect(() => () => { clearInterval(bridgeTimer) })
 }
 
+/** mtime 懒重读文件缓存（与 memory 插件同款：文件没变零成本，变了才重读）。 */
+function makeFileWatcher(log: (m: string) => void): (path: string, fallback: string) => string {
+  const cache = new Map<string, { mtime: number; text: string }>()
+  return (path, fallback) => {
+    try {
+      if (!existsSync(path)) {
+        cache.delete(path)
+        return fallback
+      }
+      const mtime = statSync(path).mtimeMs
+      const hit = cache.get(path)
+      if (hit !== undefined && hit.mtime === mtime) return hit.text
+      const text = readFileSync(path, 'utf8')
+      cache.set(path, { mtime, text })
+      return text
+    } catch (e) {
+      log('file reload error (' + path + '): ' + String(e))
+      cache.delete(path)
+      return fallback
+    }
+  }
+}
+
 /** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + staged 管理 + skill/MCP 快照 */
 async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, log: (m: string) => void): Promise<void> {
   const state = {
-    soul: '',
     soulPath,
-    user: '',
     userPath,
-    memory: '',
     memoryPath,
-    core: CORE_PERSONALITY_TEXT,
     corePath,
     skills: [] as SkillRow[],
     mcp: [] as McpRow[],
     updatedAt: 0,
   }
 
-  // 初始读 SOUL.md / USER.md / MEMORY.md / core-personality.md
-  try {
-    state.soul = existsSync(soulPath) ? readFileSync(soulPath, 'utf8') : ''
-  } catch (e) {
-    log('soul init error: ' + String(e))
-  }
-  try {
-    state.user = existsSync(userPath) ? readFileSync(userPath, 'utf8') : ''
-  } catch (e) {
-    log('user init error: ' + String(e))
-  }
-  try {
-    state.memory = existsSync(memoryPath) ? readFileSync(memoryPath, 'utf8') : ''
-  } catch (e) {
-    log('memory init error: ' + String(e))
-  }
-  try {
-    state.core = existsSync(corePath) ? readFileSync(corePath, 'utf8') : CORE_PERSONALITY_TEXT
-  } catch (e) {
-    log('core init error: ' + String(e))
-  }
+  // 面板侧实时读取：每次 status 请求按 mtime 懒重读（外部写入/工具写入即时可见）
+  const readFile = makeFileWatcher(log)
 
   // ── skill / MCP 快照 ──
   const refreshInventory = async (): Promise<void> => {
@@ -404,13 +404,13 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
 
   const statusBody = (): unknown => ({
     ok: true,
-    soul: state.soul,
+    soul: readFile(soulPath, ''),
     soulPath: state.soulPath,
-    user: state.user,
+    user: readFile(userPath, ''),
     userPath: state.userPath,
-    memory: state.memory,
+    memory: readFile(memoryPath, ''),
     memoryPath: state.memoryPath,
-    core: state.core,
+    core: readFile(corePath, CORE_PERSONALITY_TEXT),
     corePath: state.corePath,
     memoryLimit: memoryStore?.usage('memory').limit ?? 0,
     userLimit: memoryStore?.usage('user').limit ?? 0,
@@ -443,7 +443,6 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
           const body = JSON.parse(data)
           const text = String(body.soul ?? '')
           atomicWrite(soulPath, text)
-          state.soul = text
           log('SOUL.md written via API (' + text.length + ' chars)')
           json(res, 200, statusBody())
         } catch (e) {
@@ -465,7 +464,6 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
           const body = JSON.parse(data)
           const text = String(body.core ?? '')
           atomicWrite(corePath, text)
-          state.core = text
           log('core-personality.md written via API (' + text.length + ' chars)')
           json(res, 200, statusBody())
         } catch (e) {
@@ -487,7 +485,6 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
           const body = JSON.parse(data)
           const text = String(body.user ?? '')
           atomicWrite(userPath, text)
-          state.user = text
           log('USER.md written via API (' + text.length + ' chars)')
           json(res, 200, statusBody())
         } catch (e) {
@@ -509,7 +506,6 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
           const body = JSON.parse(data)
           const text = String(body.memory ?? '')
           atomicWrite(memoryPath, text)
-          state.memory = text
           log('MEMORY.md written via API (' + text.length + ' chars)')
           json(res, 200, statusBody())
         } catch (e) {
