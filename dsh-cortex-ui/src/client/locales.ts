@@ -12,6 +12,18 @@ export type CortexUiKey =
   | 'tab.user'
   | 'tab.skill'
   | 'tab.mcp'
+  | 'tab.context'
+  | 'context.title'
+  | 'context.intro'
+  | 'context.preset'
+  | 'context.presetDeepseek'
+  | 'context.presetGpt'
+  | 'context.presetCustom'
+  | 'context.ratio'
+  | 'context.ratioUnit'
+  | 'context.ratioPreview'
+  | 'context.invalid'
+  | 'context.hint'
   | 'persona.title'
   | 'persona.intro'
   | 'persona.groupArchive'
@@ -76,6 +88,18 @@ export const zh: CortexUiDict = {
   'tab.user': '用户画像',
   'tab.skill': 'skill',
   'tab.mcp': 'MCP',
+  'tab.context': '上下文',
+  'context.title': '上下文设定',
+  'context.intro': '自动压缩触发比例：会话 token 达到「上下文窗口 × 比例」时自动压缩。deepseek 预设按 1M 窗口、GPT 预设按 500K 窗口（DS 原生默认会超窗）。',
+  'context.preset': '预设',
+  'context.presetDeepseek': '默认（deepseek 80%）',
+  'context.presetGpt': 'GPT（40%）',
+  'context.presetCustom': '自定义',
+  'context.ratio': '压缩比例',
+  'context.ratioUnit': '%',
+  'context.ratioPreview': '当前生效：',
+  'context.invalid': '请输入 10-95 之间的整数百分比',
+  'context.hint': '保存后写入 context-config.json，重启 dsh web 后生效（compaction-basic 在装配时读取）。',
   'persona.title': '人格',
   'persona.intro': '人格分两层：SOUL 是档案级人格；core:personality 是机器级公共底线。两层都可在此编辑，保存后原子写回对应文件，懒重载下一条请求生效。',
   'persona.groupArchive': '档案人格',
@@ -139,6 +163,18 @@ export const en: CortexUiDict = {
   'tab.user': 'User Profile',
   'tab.skill': 'skill',
   'tab.mcp': 'MCP',
+  'tab.context': 'Context',
+  'context.title': 'Context Settings',
+  'context.intro': 'Auto-compaction trigger ratio: the session compacts when tokens reach (context window x ratio). The deepseek preset targets a 1M window, the GPT preset a 500K window (the native deepseek default would overflow GPT).',
+  'context.preset': 'Preset',
+  'context.presetDeepseek': 'Default (deepseek 80%)',
+  'context.presetGpt': 'GPT (40%)',
+  'context.presetCustom': 'Custom',
+  'context.ratio': 'Ratio',
+  'context.ratioUnit': '%',
+  'context.ratioPreview': 'Active: ',
+  'context.invalid': 'Enter an integer percentage between 10 and 95',
+  'context.hint': 'Saves to context-config.json; takes effect after restarting dsh web (compaction-basic reads it at assembly time).',
   'persona.title': 'Persona',
   'persona.intro': 'Two persona layers: SOUL is the archive-level persona; core:personality is the machine-level baseline. Both are editable here; saving writes the file atomically and lazy reload applies it on the next request.',
   'persona.groupArchive': 'Archive persona',

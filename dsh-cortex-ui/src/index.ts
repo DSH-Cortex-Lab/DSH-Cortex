@@ -191,6 +191,8 @@ export function apply(ctx: Context, _config: unknown = {}): void {
   // 待入库技能目录与技能根（与 dsh-skill-forge 默认一致：pending/skills-staged → skills）
   const stagedPath = join(homePath, 'pending', 'skills-staged')
   const skillRootPath = join(homePath, 'skills')
+  // 上下文压缩设定（compaction-basic 阈值；preset 装配以 !!js 读取本文件）
+  const contextPath = join(homePath, 'context-config.json')
   const logFile = join(homePath, 'super-injector', 'dsh-cortex-ui.log')
   const log = (msg: string): void => {
     try {
@@ -207,7 +209,7 @@ export function apply(ctx: Context, _config: unknown = {}): void {
     if (liveAgents.length === 0) return
     bridgeStarted = true
     log('host 桥启动（live agents: ' + liveAgents.length + '）')
-    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, stagedPath, skillRootPath, log)
+    void initHostBridge(ctx, soulPath, userPath, memoryPath, corePath, limitsPath, stagedPath, skillRootPath, contextPath, log)
   }
 
   startHostBridge()
@@ -238,8 +240,8 @@ function makeFileWatcher(log: (m: string) => void): (path: string, fallback: str
   }
 }
 
-/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + staged 管理 + skill/MCP 快照 */
-async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, log: (m: string) => void): Promise<void> {
+/** preset 层实例：内存状态 + webServer 路由 + SOUL/USER/MEMORY/core 同步 + 容量上限 + 上下文设定 + staged 管理 + skill/MCP 快照 */
+async function initHostBridge(ctx: Context, soulPath: string, userPath: string, memoryPath: string, corePath: string, limitsPath: string, stagedPath: string, skillRootPath: string, contextPath: string, log: (m: string) => void): Promise<void> {
   const state = {
     soulPath,
     userPath,
@@ -252,6 +254,22 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
 
   // 面板侧实时读取：每次 status 请求按 mtime 懒重读（外部写入/工具写入即时可见）
   const readFile = makeFileWatcher(log)
+
+  /** 上下文压缩设定（读取 context-config.json，缺失/损坏回退默认 deepseek 预设 0.8）。 */
+  interface ContextConfig { preset: 'deepseek' | 'gpt' | 'custom'; thresholdRatio: number }
+  const readContext = (): ContextConfig => {
+    try {
+      if (!existsSync(contextPath)) return { preset: 'deepseek', thresholdRatio: 0.8 }
+      const raw = JSON.parse(readFileSync(contextPath, 'utf8')) as { preset?: unknown; thresholdRatio?: unknown }
+      const preset = raw.preset === 'gpt' || raw.preset === 'custom' ? raw.preset : 'deepseek'
+      const ratio = typeof raw.thresholdRatio === 'number' && raw.thresholdRatio >= 0.1 && raw.thresholdRatio <= 0.95
+        ? raw.thresholdRatio
+        : preset === 'gpt' ? 0.4 : 0.8
+      return { preset, thresholdRatio: ratio }
+    } catch {
+      return { preset: 'deepseek', thresholdRatio: 0.8 }
+    }
+  }
 
   // ── skill / MCP 快照 ──
   const refreshInventory = async (): Promise<void> => {
@@ -428,6 +446,7 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
     corePath: state.corePath,
     memoryLimit: memoryStore?.usage('memory').limit ?? 0,
     userLimit: memoryStore?.usage('user').limit ?? 0,
+    context: readContext(),
     staged: listStaged(stagedPath),
     skills: state.skills,
     mcp: state.mcp,
@@ -568,6 +587,30 @@ async function initHostBridge(ctx: Context, soulPath: string, userPath: string, 
       req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
     },
   }), 'dsh-cortex-ui: limits route')
+
+  ctx.effect(() => webServer.register({
+    kind: 'exact',
+    path: '/cortex/api/context',
+    handler: (req, res) => {
+      let data = ''
+      req.on('data', (c: Buffer) => { data += c.toString('utf8') })
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(data) as { preset?: unknown; thresholdRatio?: unknown }
+          const preset = body.preset === 'gpt' || body.preset === 'custom' ? body.preset : 'deepseek'
+          const ratio = typeof body.thresholdRatio === 'number' && body.thresholdRatio >= 0.1 && body.thresholdRatio <= 0.95
+            ? body.thresholdRatio
+            : preset === 'gpt' ? 0.4 : 0.8
+          atomicWrite(contextPath, JSON.stringify({ preset, thresholdRatio: ratio }, null, 2) + '\n')
+          log('context config saved: preset=' + preset + ' thresholdRatio=' + ratio)
+          json(res, 200, statusBody())
+        } catch (e) {
+          json(res, 400, { ok: false, error: String(e) })
+        }
+      })
+      req.on('error', () => json(res, 500, { ok: false, error: 'read error' }))
+    },
+  }), 'dsh-cortex-ui: context route')
 
   ctx.effect(() => webServer.register({
     kind: 'exact',

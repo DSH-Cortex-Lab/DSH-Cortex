@@ -49,13 +49,14 @@ function useLocaleRevision(): number {
   return useSyncExternalStore(face.subscribe, face.getSnapshot).revision
 }
 
-/** 五个 tab */
+/** 六个 tab */
 const TABS = [
   { id: 'persona', key: 'tab.persona' },
   { id: 'memory', key: 'tab.memory' },
   { id: 'user', key: 'tab.user' },
   { id: 'skill', key: 'tab.skill' },
   { id: 'mcp', key: 'tab.mcp' },
+  { id: 'context', key: 'tab.context' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -82,6 +83,10 @@ interface StagedSkillRow {
   createdAt: number
   kind: 'skill' | 'delete'
 }
+interface ContextConfig {
+  preset: 'deepseek' | 'gpt' | 'custom'
+  thresholdRatio: number
+}
 interface CortexStatus {
   ok: boolean
   soul: string
@@ -94,6 +99,7 @@ interface CortexStatus {
   userLimit: number
   core: string
   corePath: string
+  context: ContextConfig
   staged: StagedSkillRow[]
   skills: SkillRow[]
   mcp: McpRow[]
@@ -725,6 +731,107 @@ function TabPlaceholder({ tab }: { tab: TabId }): React.ReactElement {
   )
 }
 
+// ── 上下文设定 tab：压缩比例预设（deepseek / gpt / 自定义）──
+const contextCard: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 720,
+  border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 12,
+  background: 'var(--dsw-alias-bg-layer-3)', padding: '14px 16px',
+}
+const contextRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }
+const contextLabel: React.CSSProperties = {
+  fontSize: 13, fontWeight: 500, color: 'var(--dsw-alias-label-primary)',
+  minWidth: 120,
+}
+const presetBtn = (active: boolean): React.CSSProperties => ({
+  appearance: 'none', border: '1px solid ' + (active ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)'),
+  borderRadius: 8, padding: '4px 12px', fontSize: 12, lineHeight: '18px', font: 'inherit',
+  cursor: 'pointer', background: active ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-layer-1)',
+  color: active ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-label-primary)',
+})
+
+/** 上下文设定：预设（deepseek 0.8 / gpt 0.4）+ 自定义压缩比例（10-95%）→ 保存后重启 web 生效。 */
+function ContextTab({ status }: { status: CortexStatus | null }): React.ReactElement {
+  const current = status?.context ?? { preset: 'deepseek' as const, thresholdRatio: 0.8 }
+  const [preset, setPreset] = useState<'deepseek' | 'gpt' | 'custom'>(current.preset)
+  const [ratioDraft, setRatioDraft] = useState(String(Math.round(current.thresholdRatio * 100)))
+  const [phase, setPhase] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [errMsg, setErrMsg] = useState('')
+
+  useEffect(() => {
+    setPreset(current.preset)
+    setRatioDraft(String(Math.round(current.thresholdRatio * 100)))
+  }, [current.preset, current.thresholdRatio])
+
+  useEffect(() => {
+    if (phase !== 'saved') return
+    const timer = setTimeout(() => setPhase('idle'), 2000)
+    return () => clearTimeout(timer)
+  }, [phase])
+
+  const save = (): void => {
+    const pct = Number(ratioDraft)
+    const ratio = pct / 100
+    if (!Number.isInteger(pct) || pct < 10 || pct > 95) {
+      setPhase('error')
+      setErrMsg(t('context.invalid'))
+      return
+    }
+    setPhase('saving')
+    fetch('/cortex/api/context', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ preset, thresholdRatio: ratio }),
+    }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) {
+          const data = d as { error?: string }
+          setPhase('error')
+          setErrMsg(data.error ?? String(d))
+          return
+        }
+        setPhase('saved')
+      })
+      .catch((e) => { setPhase('error'); setErrMsg(String(e)) })
+  }
+
+  const presetRatio = preset === 'gpt' ? 40 : preset === 'custom' ? Number(ratioDraft) : 80
+
+  return createElement('div', { style: section },
+    createElement('h2', { style: title }, t('context.title')),
+    createElement('p', { style: intro }, t('context.intro')),
+    createElement('div', { style: contextCard },
+      createElement('div', { style: contextRow },
+        createElement('span', { style: contextLabel }, t('context.preset')),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'deepseek'), onClick: () => setPreset('deepseek') }, t('context.presetDeepseek')),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'gpt'), onClick: () => setPreset('gpt') }, t('context.presetGpt')),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'custom'), onClick: () => setPreset('custom') }, t('context.presetCustom'))),
+      createElement('div', { style: contextRow },
+        createElement('span', { style: contextLabel }, t('context.ratio')),
+        createElement('input', {
+          type: 'number',
+          style: limitInput,
+          value: ratioDraft,
+          min: 10,
+          max: 95,
+          step: 5,
+          disabled: preset !== 'custom',
+          'aria-label': t('context.ratio'),
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => { setRatioDraft(e.target.value); if (phase !== 'idle') setPhase('idle') },
+        }),
+        createElement('span', { style: saveNote }, t('context.ratioUnit') + '（' + t('context.ratioPreview') + String(presetRatio) + '%）')),
+      createElement('div', { style: contextRow },
+        phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, errMsg) : null,
+        phase === 'saved' ? createElement('span', { style: saveNote }, t('editor.saved')) : null,
+        createElement('button', {
+          type: 'button',
+          style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
+          disabled: phase === 'saving',
+          onClick: save,
+        }, phase === 'saving' ? t('editor.saving') : t('editor.save'))),
+      createElement('p', { style: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t('context.hint'))),
+  )
+}
+
 /** 全屏 overlay 面板：左侧 tab 导航 + 右侧内容区 */
 function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
   const [tab, setTab] = useState<TabId>('persona')
@@ -775,7 +882,9 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
                     ? createElement(SkillTab, { status, refresh })
                     : tab === 'mcp'
                       ? createElement(McpTab, { status })
-                      : createElement(TabPlaceholder, { tab }),
+                      : tab === 'context'
+                        ? createElement(ContextTab, { status })
+                        : createElement(TabPlaceholder, { tab }),
         ),
       ),
     ),
