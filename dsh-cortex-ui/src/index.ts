@@ -132,6 +132,20 @@ function revealInExplorer(target: string): boolean {
 
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+/** 解码 frontmatter 标量：渲染端用 JSON 双引号（renderSkillFile），裸正则会带引号捕获，需剥掉。 */
+function unquoteScalar(raw: string): string {
+  const t = raw.trim()
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"')) {
+    try {
+      return JSON.parse(t)
+    } catch {
+      return t.slice(1, -1)
+    }
+  }
+  if (t.length >= 2 && t.startsWith("'") && t.endsWith("'")) return t.slice(1, -1)
+  return t
+}
+
 /** 待入库清单（pending/skills-staged：技能项 + 删除标记项，按生成时间倒序）。 */
 function listStaged(stagedDir: string): Array<{ name: string; description: string; createdAt: number; kind: 'skill' | 'delete' }> {
   const rows: Array<{ name: string; description: string; createdAt: number; kind: 'skill' | 'delete' }> = []
@@ -142,8 +156,8 @@ function listStaged(stagedDir: string): Array<{ name: string; description: strin
       if (existsSync(skillPath)) {
         try {
           const raw = readFileSync(skillPath, 'utf8')
-          const name = /^name:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? entry
-          const description = /^description:\s*(.+)$/m.exec(raw)?.[1]?.trim() ?? ''
+          const name = unquoteScalar(/^name:\s*(.+)$/m.exec(raw)?.[1] ?? entry)
+          const description = unquoteScalar(/^description:\s*(.+)$/m.exec(raw)?.[1] ?? '')
           rows.push({ name, description, createdAt: statSync(skillPath).mtimeMs, kind: 'skill' })
         } catch { /* 单个技能不可读则跳过 */ }
         continue
