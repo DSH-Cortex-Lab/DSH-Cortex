@@ -749,8 +749,8 @@ const presetBtn = (active: boolean): React.CSSProperties => ({
   color: active ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-label-primary)',
 })
 
-/** 上下文设定：预设（deepseek 0.8 / gpt 0.4）+ 自定义压缩比例（10-95%）→ 保存后重启 web 生效。 */
-function ContextTab({ status }: { status: CortexStatus | null }): React.ReactElement {
+/** 上下文设定：预设点击即保存（deepseek 0.8 / gpt 0.4），自定义比例 10-95% 手动保存。 */
+function ContextTab({ status, refresh }: { status: CortexStatus | null; refresh: () => void }): React.ReactElement {
   const current = status?.context ?? { preset: 'deepseek' as const, thresholdRatio: 0.8 }
   const [preset, setPreset] = useState<'deepseek' | 'gpt' | 'custom'>(current.preset)
   const [ratioDraft, setRatioDraft] = useState(String(Math.round(current.thresholdRatio * 100)))
@@ -768,19 +768,25 @@ function ContextTab({ status }: { status: CortexStatus | null }): React.ReactEle
     return () => clearTimeout(timer)
   }, [phase])
 
-  const save = (): void => {
-    const pct = Number(ratioDraft)
-    const ratio = pct / 100
-    if (!Number.isInteger(pct) || pct < 10 || pct > 95) {
-      setPhase('error')
-      setErrMsg(t('context.invalid'))
-      return
+  /** 预设的规范比例：deepseek 0.8 / gpt 0.4 / custom 用草稿输入。 */
+  const ratioFor = (p: 'deepseek' | 'gpt' | 'custom'): number =>
+    p === 'gpt' ? 0.4 : p === 'custom' ? Number(ratioDraft) / 100 : 0.8
+
+  const save = (p: 'deepseek' | 'gpt' | 'custom', silent = false): void => {
+    const ratio = ratioFor(p)
+    if (p === 'custom') {
+      const pct = Number(ratioDraft)
+      if (!Number.isInteger(pct) || pct < 10 || pct > 95) {
+        setPhase('error')
+        setErrMsg(t('context.invalid'))
+        return
+      }
     }
-    setPhase('saving')
+    if (!silent) setPhase('saving')
     fetch('/cortex/api/context', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ preset, thresholdRatio: ratio }),
+      body: JSON.stringify({ preset: p, thresholdRatio: ratio }),
     }).then((r) => r.json().then((d: unknown) => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
         if (!ok) {
@@ -790,11 +796,18 @@ function ContextTab({ status }: { status: CortexStatus | null }): React.ReactEle
           return
         }
         setPhase('saved')
+        refresh()
       })
       .catch((e) => { setPhase('error'); setErrMsg(String(e)) })
   }
 
-  const presetRatio = preset === 'gpt' ? 40 : preset === 'custom' ? Number(ratioDraft) : 80
+  /** 点预设 = 立即保存并选中（无需再按保存）。 */
+  const pickPreset = (p: 'deepseek' | 'gpt' | 'custom'): void => {
+    setPreset(p)
+    save(p, true)
+  }
+
+  const presetRatio = ratioFor(preset)
 
   return createElement('div', { style: section },
     createElement('h2', { style: title }, t('context.title')),
@@ -802,9 +815,9 @@ function ContextTab({ status }: { status: CortexStatus | null }): React.ReactEle
     createElement('div', { style: contextCard },
       createElement('div', { style: contextRow },
         createElement('span', { style: contextLabel }, t('context.preset')),
-        createElement('button', { type: 'button', style: presetBtn(preset === 'deepseek'), onClick: () => setPreset('deepseek') }, t('context.presetDeepseek')),
-        createElement('button', { type: 'button', style: presetBtn(preset === 'gpt'), onClick: () => setPreset('gpt') }, t('context.presetGpt')),
-        createElement('button', { type: 'button', style: presetBtn(preset === 'custom'), onClick: () => setPreset('custom') }, t('context.presetCustom'))),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'deepseek'), onClick: () => pickPreset('deepseek') }, t('context.presetDeepseek')),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'gpt'), onClick: () => pickPreset('gpt') }, t('context.presetGpt')),
+        createElement('button', { type: 'button', style: presetBtn(preset === 'custom'), onClick: () => pickPreset('custom') }, t('context.presetCustom'))),
       createElement('div', { style: contextRow },
         createElement('span', { style: contextLabel }, t('context.ratio')),
         createElement('input', {
@@ -818,16 +831,18 @@ function ContextTab({ status }: { status: CortexStatus | null }): React.ReactEle
           'aria-label': t('context.ratio'),
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => { setRatioDraft(e.target.value); if (phase !== 'idle') setPhase('idle') },
         }),
-        createElement('span', { style: saveNote }, t('context.ratioUnit') + '（' + t('context.ratioPreview') + String(presetRatio) + '%）')),
+        createElement('span', { style: saveNote }, t('context.ratioUnit') + '（' + t('context.ratioPreview') + String(Math.round(presetRatio * 100)) + '%）')),
       createElement('div', { style: contextRow },
         phase === 'error' ? createElement('span', { style: { ...saveNote, color: 'var(--dsw-alias-state-error-primary)' } }, errMsg) : null,
         phase === 'saved' ? createElement('span', { style: saveNote }, t('editor.saved')) : null,
-        createElement('button', {
-          type: 'button',
-          style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
-          disabled: phase === 'saving',
-          onClick: save,
-        }, phase === 'saving' ? t('editor.saving') : t('editor.save'))),
+        preset === 'custom'
+          ? createElement('button', {
+            type: 'button',
+            style: { ...saveBtn, opacity: phase === 'saving' ? 0.5 : 1 },
+            disabled: phase === 'saving',
+            onClick: () => save('custom'),
+          }, phase === 'saving' ? t('editor.saving') : t('editor.save'))
+          : createElement('span', { style: saveNote }, t('context.autoSaveHint'))),
       createElement('p', { style: { margin: 0, fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t('context.hint'))),
   )
 }
@@ -883,7 +898,7 @@ function CortexPanel({ onClose }: { onClose: () => void }): React.ReactElement {
                     : tab === 'mcp'
                       ? createElement(McpTab, { status })
                       : tab === 'context'
-                        ? createElement(ContextTab, { status })
+                        ? createElement(ContextTab, { status, refresh })
                         : createElement(TabPlaceholder, { tab }),
         ),
       ),
