@@ -4,32 +4,17 @@
  * 人控入库（D-d 修订）：不注册 skill_promote——入库唯一入口是管理面板的「入库」按钮，
  * agent 无法自行把 staged 落回扫描根（防止绕过人工审批）。
  *
- * 每次成功写 append `skill/write` 审计事件（log-only）。工具 schema/描述不含运行时数据（D17）。
+ * 审计说明（B2 决策 2026-08-20）：不再 append `skill/write` 自定义会话事件——
+ * dsh 读侧只认官方事件类型（或 ignorable 标记），自定义事件会导致会话 resume
+ * 直接失败（SessionFormatUnsupportedError）。写入留痕由官方 tool/call + tool/result
+ * 事件天然覆盖，无需自定义审计事件。工具 schema/描述不含运行时数据（D17）。
  *
  * @module dsh-skill-forge
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool, type ObjectValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-session'
 import { SkillForge, type ForgeResult } from './forge.ts'
-
-/** 一次技能写操作的审计载荷（log-only，不进模型可见历史）。 */
-export interface SkillWriteEvent {
-  /** 写操作类型。 */
-  action: 'create' | 'patch' | 'edit' | 'delete'
-  /** 技能名（kebab-case）。 */
-  name: string
-  /** 落盘路径（staged 路径）。 */
-  path?: string
-}
-
-declare module '@deepseek-ai/dsh-session' {
-  interface SessionEventMap {
-    'skill/write': SkillWriteEvent
-  }
-}
 
 const FORGE_OUTPUT = {
   schema: {
@@ -56,15 +41,13 @@ export function registerSkillTools(ctx: Context, forge: SkillForge): void {
       content: { type: 'string', required: true, description: 'The skill body as Markdown instructions.' },
     },
     output: FORGE_OUTPUT,
-    async execute(args, exec) {
-      const result = await forge.create({
+    async execute(args) {
+      return forge.create({
         name: args.name,
         description: args.description,
         ...(args.whenToUse !== undefined ? { whenToUse: args.whenToUse } : {}),
         content: args.content,
       })
-      if (result.success) audit(exec.agent, 'create', args.name, result)
-      return result
     },
     presentCall: args => ({ card: 'generic', title: 'skill_create', kind: 'other', rawInput: args.name }),
   }))
@@ -79,14 +62,12 @@ export function registerSkillTools(ctx: Context, forge: SkillForge): void {
       bodyPatch: { type: 'string', description: 'New full body Markdown (replaces the current body).' },
     },
     output: FORGE_OUTPUT,
-    async execute(args, exec) {
-      const result = await forge.patch(args.name, {
+    async execute(args) {
+      return forge.patch(args.name, {
         ...(args.description !== undefined ? { description: args.description } : {}),
         ...(args.whenToUse !== undefined ? { whenToUse: args.whenToUse } : {}),
         ...(args.bodyPatch !== undefined ? { bodyPatch: args.bodyPatch } : {}),
       })
-      if (result.success) audit(exec.agent, 'patch', args.name, result)
-      return result
     },
     presentCall: args => ({ card: 'generic', title: 'skill_patch', kind: 'other', rawInput: args.name }),
   }))
@@ -99,10 +80,8 @@ export function registerSkillTools(ctx: Context, forge: SkillForge): void {
       content: { type: 'string', required: true, description: 'The new body Markdown.' },
     },
     output: FORGE_OUTPUT,
-    async execute(args, exec) {
-      const result = await forge.patch(args.name, { bodyPatch: args.content })
-      if (result.success) audit(exec.agent, 'edit', args.name, result)
-      return result
+    async execute(args) {
+      return forge.patch(args.name, { bodyPatch: args.content })
     },
     presentCall: args => ({ card: 'generic', title: 'skill_edit', kind: 'other', rawInput: args.name }),
   }))
@@ -114,19 +93,11 @@ export function registerSkillTools(ctx: Context, forge: SkillForge): void {
       name: { type: 'string', required: true, description: 'kebab-case skill name.' },
     },
     output: FORGE_OUTPUT,
-    async execute(args, exec) {
-      const result = await forge.delete(args.name)
-      if (result.success) audit(exec.agent, 'delete', args.name, result)
-      return result
+    async execute(args) {
+      return forge.delete(args.name)
     },
     presentCall: args => ({ card: 'generic', title: 'skill_delete', kind: 'other', rawInput: args.name }),
   }))
-}
-
-/** D2/D18：审计事件（log-only），仅成功写时 append；非 agent 调用者无 session，跳过。 */
-function audit(agent: Agent | undefined, action: SkillWriteEvent['action'], name: string, result: ForgeResult): void {
-  if (agent === undefined) return
-  agent.session.append('skill/write', { action, name, ...(result.path !== undefined ? { path: result.path } : {}) })
 }
 
 function renderForgeResult(value: ForgeResult): string {

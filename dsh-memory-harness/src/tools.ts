@@ -1,35 +1,20 @@
 /**
  * 记忆三工具：memory_add / memory_replace / memory_remove。
  *
- * 每次成功写 append `memory/write` 审计事件（D2 双写、D18 log-only）；写后快照更新由
- * SnapshotService 在下一条请求重快照时生效（D20）。工具 schema/描述不含运行时数据（D17）。
+ * 写后快照更新由 SnapshotService 在下一条请求重快照时生效（D20）。
+ * 工具 schema/描述不含运行时数据（D17）。
+ *
+ * 审计说明（B2 决策 2026-08-20）：不再 append `memory/write` 自定义会话事件——
+ * dsh 读侧只认官方事件类型（或 ignorable 标记），自定义事件会导致会话 resume
+ * 直接失败（SessionFormatUnsupportedError）。写入留痕由官方 tool/call + tool/result
+ * 事件天然覆盖（参数与返回值完整），无需自定义审计事件。
  *
  * @module dsh-memory-harness
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
 import { defineTool, type ObjectValueSchemaSpec } from '@deepseek-ai/dsh-tools'
-import type {} from '@deepseek-ai/dsh-session'
 import { MemoryStore, type WriteResult } from './store.ts'
-
-/** 一次记忆写操作的审计载荷（D18：仅审计，不进模型可见历史）。 */
-export interface MemoryWriteEvent {
-  /** 操作类型。 */
-  action: 'add' | 'replace' | 'remove'
-  /** 目标档案：P0 仅 'memory'；'user' 后移（M1b）。 */
-  target: 'memory' | 'user'
-  /** 本次写的内容：add/replace 为新条目文本，remove 为被删条目的定位子串。 */
-  content: string
-  /** 写入后的 usage（条目内容字符数）。 */
-  usage: number
-}
-
-declare module '@deepseek-ai/dsh-session' {
-  interface SessionEventMap {
-    'memory/write': MemoryWriteEvent
-  }
-}
 
 const TARGET_SCHEMA = {
   type: 'string' as const,
@@ -63,10 +48,8 @@ export function registerMemoryTools(ctx: Context, store: MemoryStore): void {
       content: { type: 'string', required: true, description: 'The entry text to append.' },
     },
     output: WRITE_OUTPUT,
-    execute(args, exec) {
-      const result = store.add(args.target, args.content)
-      if (result.success) auditMemoryWrite(exec.agent, 'add', args.target, args.content, result.usage)
-      return Promise.resolve(result)
+    execute(args) {
+      return Promise.resolve(store.add(args.target, args.content))
     },
     presentCall: args => ({ card: 'generic', title: 'memory_add', kind: 'other', rawInput: args.content }),
   }))
@@ -80,10 +63,8 @@ export function registerMemoryTools(ctx: Context, store: MemoryStore): void {
       content: { type: 'string', required: true, description: 'The new entry text.' },
     },
     output: WRITE_OUTPUT,
-    execute(args, exec) {
-      const result = store.replace(args.target, args.old_text, args.content)
-      if (result.success) auditMemoryWrite(exec.agent, 'replace', args.target, args.content, result.usage)
-      return Promise.resolve(result)
+    execute(args) {
+      return Promise.resolve(store.replace(args.target, args.old_text, args.content))
     },
     presentCall: args => ({ card: 'generic', title: 'memory_replace', kind: 'other', rawInput: args.old_text }),
   }))
@@ -96,25 +77,11 @@ export function registerMemoryTools(ctx: Context, store: MemoryStore): void {
       old_text: { type: 'string', required: true, description: 'A substring identifying the entry to remove.' },
     },
     output: WRITE_OUTPUT,
-    execute(args, exec) {
-      const result = store.remove(args.target, args.old_text)
-      if (result.success) auditMemoryWrite(exec.agent, 'remove', args.target, args.old_text, result.usage)
-      return Promise.resolve(result)
+    execute(args) {
+      return Promise.resolve(store.remove(args.target, args.old_text))
     },
     presentCall: args => ({ card: 'generic', title: 'memory_remove', kind: 'other', rawInput: args.old_text }),
   }))
-}
-
-/** D2/D18：审计事件（log-only），仅成功写时 append；非 agent 调用者无 session，跳过。 */
-function auditMemoryWrite(
-  agent: Agent | undefined,
-  action: MemoryWriteEvent['action'],
-  target: MemoryWriteEvent['target'],
-  content: string,
-  usage: number,
-): void {
-  if (agent === undefined) return
-  agent.session.append('memory/write', { action, target, content, usage })
 }
 
 function renderWriteResult(value: WriteResult): string {

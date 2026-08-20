@@ -1,38 +1,32 @@
-/** Package-owned durable skill-write invariants. @module @dsh-cortex/dsh-skill-forge/invariant */
+/**
+ * Package-owned durable skill-write invariants.
+ *
+ * 停用说明（B2 决策 2026-08-20）：审计事件 `skill/write` 已不再写入会话日志——
+ * 自定义会话事件会导致 dsh 读侧 SessionFormatUnsupportedError（写侧无 ignorable
+ * 声明通道），写入留痕由官方 tool/call + tool/result 事件天然覆盖。本 invariant
+ * 保留注册与安装逻辑但校验体为空操作：历史日志中已带 ignorable 标记的旧事件
+ * 会被静默放行，新日志不再产生该类事件。
+ * @module @dsh-cortex/dsh-skill-forge/invariant
+ */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@dsh-cortex/dsh-skill-forge'
-const ACTIONS = new Set(['create', 'patch', 'edit', 'delete'])
 
 /** Cordis companion plugin name. */
 export const name = 'dsh-skill-forge-invariant'
 /** Service required before the companion can reserve package ownership. */
 export const inject = ['invariants']
 
-/**
- * Validate one skill/write audit payload before it reaches the durable log.
- * Only durable-shape rules: name is a non-empty string; path, when present, is a string.
- */
-function validateSkillWrite(value: unknown, fail: InvariantFailure): void {
-  if (typeof value !== 'object' || value === null) fail('skill/write payload must be an object')
-  const record = value as Record<string, unknown>
-  if (typeof record.action !== 'string' || !ACTIONS.has(record.action)) {
-    fail(`skill/write carries unknown action ${JSON.stringify(record.action)}`)
-  }
-  if (typeof record.name !== 'string' || record.name.length === 0) fail('skill/write name must be a non-empty string')
-  if (record.path !== undefined && typeof record.path !== 'string') fail('skill/write path must be a string when present')
-}
-
 /* jscpd:ignore-start -- package companions share replay and dispatch plumbing */
-/** Validate the package-owned event fields and ignore unrelated events. */
-function validateEvent(event: SessionEvent, fail: InvariantFailure): void {
-  if (event.type === 'skill/write') validateSkillWrite(event.data, fail)
+/** 事件校验（B2 停用）：skill/write 不再产生，历史 ignorable 事件静默放行。 */
+function validateEvent(_event: SessionEvent, _fail: InvariantFailure): void {
+  /* no-op */
 }
 
-/** Install validation for loaded and newly appended skill/write audit payloads. */
+/** Install（B2 停用）：保留注册形状，事件校验为空操作。 */
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   for (const session of ctx.sessions.list()) {
     for (const event of session.events) validateEvent(event, fail)

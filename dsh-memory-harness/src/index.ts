@@ -40,7 +40,6 @@ export {
   resolveProcessProfile,
 } from './profile.ts'
 export type { ArchiveId, MemoryPaths } from './profile.ts'
-export type { MemoryWriteEvent } from './tools.ts'
 
 export const name = 'dsh-memory-harness'
 

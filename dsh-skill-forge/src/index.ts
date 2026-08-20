@@ -33,7 +33,6 @@ export type { ConversationDigest, DigestEntry, SecretKind, ReviewOutput, SkillCa
 // 本包 review 集成层
 export { ReviewEngine, applyReviewOutput, projectEntries, extractEarlySummary } from './review.ts'
 export type { ReviewConfig, MemoryStoreLike } from './review.ts'
-export type { SkillWriteEvent } from './tools.ts'
 
 export const name = 'dsh-skill-forge'
 
