@@ -58,7 +58,7 @@ link_pkg @deepseek-ai/dsh-client-ui-settings packages/client/ui-settings
 link_pkg @deepseek-ai/dsh-api-remotes packages/api/remotes
 link_pkg @deepseek-ai/dsh-settings packages/settings/settings
 # 兄弟包：host 端 import CORE_PERSONALITY_TEXT（绝对路径，跨 checkout）
-link_pkg @dsh-cortex/dsh-memory-harness "D:/Deploy/deepseekherness/Project/CORE2/DSH-Cortex/dsh-memory-harness"
+link_pkg @dsh-cortex/dsh-memory-harness "D:/Deploy/deepseekherness/Project/CORE/DSH-Cortex/dsh-memory-harness"
 # @types/node（编译类型；checkout 自带）
 link_pkg @types/node node_modules/@types/node
 
